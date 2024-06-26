@@ -38,6 +38,7 @@ private
       self.level = Logger::INFO
     end
     @worker.opt.update(opt)
+    @log.info("Start XSD2Ruby-br")
     @worker.run
     0
   end

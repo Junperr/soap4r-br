@@ -43,6 +43,13 @@ class ClassDefCreator
   end
 
   def dump(type = nil)
+    puts "Dumping class definition..."
+    puts "group: #{@modelgroups.inspect}"
+    puts "simpletype: #{@simpletypes.inspect}"
+    puts "complextypes: #{@complextypes.inspect}"
+    puts "elements: #{@elements.inspect}"
+    puts "attributes: #{@attributes.inspect}"
+
     result = "require 'xsd/qname'\n"
     # cannot use @modulepath because of multiple classes
     if @modulepath
@@ -107,6 +114,7 @@ private
   def dump_simpletype(target = nil)
     @simpletypes.collect { |type|
       next if target and target != type.name
+      puts "Creating simple type: #{type.name}"
       c = create_simpletypedef(@modulepath, type.name, type)
       c ? c.dump : nil
     }.compact.join("\n")
@@ -129,10 +137,13 @@ private
   def create_elementdef(mpath, ele)
     qualified = (ele.elementform == 'qualified')
     if ele.local_complextype
+      puts "Creating complex type: #{ele.name}"
       create_complextypedef(mpath, ele.name, ele.local_complextype, qualified)
     elsif ele.local_simpletype
+      puts "Creating simple type: #{ele.name}"
       create_simpletypedef(mpath, ele.name, ele.local_simpletype, qualified)
     elsif ele.empty?
+      puts "Creating simple class: #{ele.name}"
       create_simpleclassdef(mpath, ele.name, nil)
     else
       # ignores type only element
@@ -154,6 +165,7 @@ private
 
   def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
     restriction = typedef.restriction
+    puts "restriction: #{typedef.restriction}"
     unless restriction.enumeration?
       # not supported.  minlength?
       return nil

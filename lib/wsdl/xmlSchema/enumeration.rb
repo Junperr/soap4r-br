@@ -24,6 +24,7 @@ class Enumeration < Info
   end
 
   def parse_attr(attr, value)
+    puts "Enumeration#parse_attr: attr=#{attr}, value=#{value}"
     case attr
     when ValueAttrName
       parent.enumeration << value.source

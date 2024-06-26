@@ -58,6 +58,7 @@ class SimpleRestriction < Info
   end
 
   def parse_element(element)
+    puts "SimpleRestriction#parse_element: element=#{element}"
     case element
     when LengthName
       Length.new
@@ -104,6 +105,28 @@ class SimpleRestriction < Info
       @base = value
     end
   end
+
+  def to_s
+  <<~OUTPUT
+    SimpleRestriction:
+      base: #{@base}
+      length: #{@length}
+      minlength: #{@minlength}
+      maxlength: #{@maxlength}
+      pattern: #{@pattern}
+      enumeration: #{@enumeration.join(', ')}
+      whitespace: #{@whitespace}
+      maxinclusive: #{@maxinclusive}
+      maxexclusive: #{@maxexclusive}
+      minexclusive: #{@minexclusive}
+      mininclusive: #{@mininclusive}
+      totaldigits: #{@totaldigits}
+      fractiondigits: #{@fractiondigits}
+      fixed: #{@fixed}
+      attributes: #{@attributes}
+      initialise: enumeration: [\"#{@enumeration.join('", "')}\"], min_length: #{@minlength}, max_length:  #{@maxlength}, pattern: #{@pattern}
+  OUTPUT
+end
 
 private
 

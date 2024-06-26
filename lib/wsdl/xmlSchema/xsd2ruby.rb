@@ -35,6 +35,7 @@ class XSD2Ruby
     end
     @xsd = import(@location)
     @name = @opt['classdef'] || create_classname(@xsd)
+    @logger.info { "Creating Ruby module for XML Schema." }
     create_file
   end
 

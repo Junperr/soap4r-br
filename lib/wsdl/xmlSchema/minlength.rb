@@ -24,6 +24,7 @@ class MinLength < Info
   end
 
   def parse_attr(attr, value)
+    puts "MinLength#parse_attr: attr=#{attr}, value=#{value}"
     case attr
     when FixedAttrName
       parent.fixed[:minlength] = to_boolean(value)

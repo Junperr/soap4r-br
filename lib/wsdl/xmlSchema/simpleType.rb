@@ -54,6 +54,7 @@ class SimpleType < Info
   end
 
   def parse_element(element)
+    puts "SimpleType#parse_element: element=#{element}"
     case element
     when RestrictionName
       @restriction = SimpleRestriction.new

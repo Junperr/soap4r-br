@@ -57,6 +57,7 @@ class Schema < Info
   end
 
   def parse_element(element)
+    puts "\n\nSchema#parse_element: element=#{element}"
     case element
     when ImportName
       o = Import.new
