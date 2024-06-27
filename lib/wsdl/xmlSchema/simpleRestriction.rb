@@ -57,6 +57,18 @@ class SimpleRestriction < Info
     !@enumeration.empty?
   end
 
+  def min_length?
+    !@minlength.nil?
+  end
+
+  def max_length?
+    !@maxlength.nil?
+  end
+
+  def pattern?
+    !@pattern.nil?
+  end
+
   def parse_element(element)
     puts "SimpleRestriction#parse_element: element=#{element}"
     case element
@@ -103,6 +115,9 @@ class SimpleRestriction < Info
     case attr
     when BaseAttrName
       @base = value
+    when PatternName
+      @pattern_str = value
+      @pattern = Regexp.new(@pattern_str)
     end
   end
 

@@ -50,7 +50,7 @@ class ClassDefCreator
     puts "elements: #{@elements.inspect}"
     puts "attributes: #{@attributes.inspect}"
 
-    result = "require 'xsd/qname'\n"
+    result = "require_relative '../SimpleRes'\n" #@todo: changed depending on the structure
     # cannot use @modulepath because of multiple classes
     if @modulepath
       result << "\n"
@@ -135,6 +135,7 @@ private
   end
 
   def create_elementdef(mpath, ele)
+    puts "Creating element: #{ele.name}"
     qualified = (ele.elementform == 'qualified')
     if ele.local_complextype
       puts "Creating complex type: #{ele.name}"
@@ -166,14 +167,15 @@ private
   def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
     restriction = typedef.restriction
     puts "restriction: #{typedef.restriction}"
-    unless restriction.enumeration?
-      # not supported.  minlength?
+    unless restriction.enumeration? || restriction.min_length? || restriction.max_length? || restriction.pattern?
+      # other restriction are not supported
       return nil
     end
     classname = mapped_class_basename(qname, mpath)
-    c = ClassDef.new(classname, '::String')
+    c = ClassDef.new(classname, 'SimpleRestriction')
     c.comment = "#{qname}"
-    define_classenum_restriction(c, classname, restriction.enumeration)
+    define_string_restriction(c, classname, restriction)
+    # define_classenum_restriction(c, classname, restriction.enumeration)
     c
   end
 
@@ -221,6 +223,16 @@ private
     end
   end
 
+  def define_string_restriction(c, classname, restriction)
+    enum_str = !restriction.enumeration? ? 'nil' : "[#{restriction.enumeration.map { |e| "\"#{e}\"" }.join(', ')}]"
+  min_length_str = !restriction.min_length? ? 'nil' : restriction.minlength
+  max_length_str = !restriction.max_length? ? 'nil' : restriction.maxlength
+pattern_str = !restriction.pattern? ? 'nil' : "/#{restriction.pattern.source}/"
+    c.def_code("def initialize(enumeration: #{enum_str}, min_length: #{min_length_str}, max_length: #{max_length_str}, pattern: #{pattern_str})
+  super(enumeration: enumeration, min_length: min_length, max_length: max_length, pattern: pattern)
+end")
+  end
+
   def define_classenum_restriction(c, classname, enumeration)
     const = {}
     enumeration.each do |value|
@@ -249,6 +261,7 @@ private
   end
 
   def create_complextypedef(mpath, qname, type, qualified = false)
+    puts "Creating complex type: #{qname} #{type.compoundtype}"
     case type.compoundtype
     when :TYPE_STRUCT, :TYPE_EMPTY
       create_structdef(mpath, qname, type, qualified)
@@ -288,6 +301,8 @@ private
     parentmodule = mapped_class_name(qname, mpath)
     init_lines, init_params =
       parse_elements(c, typedef.elements, qname.namespace, parentmodule)
+    puts "init_lines: #{init_lines}"
+    puts "init_params: #{init_params}"
     unless typedef.attributes.empty?
       define_attribute(c, typedef.attributes)
       init_lines << "@__xmlattr = {}"
@@ -303,6 +318,7 @@ private
     init_params = []
     any = false
     elements.each do |element|
+      puts "element: #{element} #{element.inspect}"
       case element
       when XMLSchema::Any
         # only 1 <any/> is allowed for now.
@@ -318,6 +334,7 @@ private
         next if element.ref == SchemaName
         name = name_element(element).name
         typebase = @modulepath
+        # puts "element is anonymous: #{element.anonymous_type? == true}"
         if element.anonymous_type?
           inner = create_elementdef(mpath, element)
           unless as_array
