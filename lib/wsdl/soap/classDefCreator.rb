@@ -299,10 +299,11 @@ end")
         c.comment << "\nabstract" if typedef.abstract
         puts "\nc1: #{c.dump}\n"
         parentmodule = mapped_class_name(qname, mpath)
-        init_lines, init_params =
+        init_lines, init_params, skip_params =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
         puts "init_lines: #{init_lines}"
         puts "init_params: #{init_params}"
+        puts "skip_params: #{skip_params}"
         puts "\nc2: #{c.dump}\n"
         unless typedef.attributes.empty?
           define_attribute(c, typedef.attributes)
@@ -310,7 +311,22 @@ end")
         end
         # handle initialize method
         c.def_method('initialize', *init_params) do
+          unless skip_params.empty?
+            init_lines << "any_nil_or_empty?"
+          end
           init_lines.join("\n")
+
+        end
+        unless skip_params.empty?
+          c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
+            "instance_variables.any? do |var|
+      # Skip the attribute if it's allowed to be nil or empty
+      next if allowed_nil_attributes.include?(var[1..].to_sym)
+
+      value = instance_variable_get(var)
+      value.nil? || (value.respond_to?(:empty?) && value.empty?)
+    end"
+          end
         end
         # puts "\nc3: #{c.dump}\n"
         c
@@ -319,6 +335,7 @@ end")
       def parse_elements(c, elements, base_namespace, mpath, as_array = false)
         init_lines = []
         init_params = []
+        skip_params = []
         any = false
         elements.each do |element|
           puts "\nelement: #{element} #{element.inspect}"
@@ -357,9 +374,11 @@ end")
               attrname = safemethodname(name)
               varname = safevarname(name)
               c.def_attr(attrname, true, varname)
-
+              if element.minoccurs == 0
+                skip_params << ":#{varname}"
+              end
               inner2 = check_element(element)
-              #classname = mapped_class_basename(qname, mpath)
+              # classname = mapped_class_basename(qname, mpath)
               if inner2
                 init_lines << "@#{varname} = #{mapped_class_basename(element.name, @modulepath)}.new\n@#{varname}.value = #{varname}"
                 if element.map_as_array?
@@ -405,7 +424,7 @@ end")
             raise RuntimeError.new("unknown type: #{element}")
           end
         end
-        [init_lines, init_params]
+        [init_lines, init_params, skip_params]
       end
 
       def check_element(element)
@@ -493,7 +512,15 @@ end")
           modulepath.to_s.split('::')
         end
       end
-    end
 
+      def format_skip_element(arr)
+        return arr if arr.empty? # Return the array as is if it's empty
+
+        arr[0] = "allowed_nil_attributes = [#{arr[0]}" # Add [ before the first element
+        arr[-1] = "#{arr[-1]}]" # Add ] after the last element
+
+        arr # Return the modified array
+      end
+    end
   end
 end
