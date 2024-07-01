@@ -390,6 +390,14 @@ end")
                 c.innermodule << inner2
                 typebase = mpath
               else
+                typename = create_type_name(typebase, element)
+                if typename.is_a?(Array)
+                  types_check = typename.map { |type| "#{varname}.is_a?(#{type})" }.join(' || ')
+                  types_list = typename.join(' or ')
+                  init_lines << "unless #{types_check}\n  raise ArgumentError, \"#{varname} must be #{types_list}\"\nend"
+                else
+                  init_lines << "unless #{varname}.is_a?(#{typename})\n  raise ArgumentError,\"#{varname} must be #{typename}\"\nend"
+                end
                 init_lines << "@#{varname} = #{varname}"
                 if element.map_as_array?
                   init_params << "#{varname} = []"
