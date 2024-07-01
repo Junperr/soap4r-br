@@ -102,10 +102,12 @@ __EOD__
   end
 
   def create_type_name(modulepath, element)
+    puts "element= #{element.name} type #{element.type} ref #{element.ref} anom ?#{element.anonymous_type?} simplesypes #{@simpletypes}"
     if element.type == XSD::AnyTypeName
       # nil means anyType.
       nil
     elsif simpletype = @simpletypes[element.type]
+      puts "option 1"
       if simpletype.restriction and simpletype.restriction.enumeration?
         mapped_class_name(element.type, modulepath)
       else
@@ -114,10 +116,13 @@ __EOD__
     elsif klass = element_basetype(element)
       klass.name
     elsif element.type
+      puts "option 3"
       mapped_class_name(element.type, modulepath)
     elsif element.ref
+      puts "option 4"
       mapped_class_name(element.ref, modulepath)
     elsif element.anonymous_type?
+      puts "option 5"
       # inner class
       mapped_class_name(element.name, modulepath)
     else
@@ -185,10 +190,22 @@ private
   end
 
   def element_basetype(ele)
+    puts "option 2"
+    puts "element_basetype #{ele.name} type #{ele.type} simpletype #{ele.local_simpletype}"
     if klass = basetype_class(ele.type)
+      puts "option bis 1 #{klass}"
       klass
     elsif ele.local_simpletype
-      basetype_class(ele.local_simpletype.base)
+      puts "option bis 2"
+      #here we have acces to the simple type we should work here
+      # c = create_simpletypedef(@modulepath, attribute.name, attribute.local_simpletype) to generate the class
+      c = create_simpletypedef(@modulepath, ele.name, ele.local_simpletype)
+      if c
+        name_element(ele)
+      else
+        basetype_class(ele.local_simpletype.base)
+      end
+
     else
       nil
     end
@@ -214,13 +231,13 @@ private
   end
 
   def name_element(element)
-    return element.name if element.name 
+    return element.name if element.name
     return element.ref if element.ref
     raise RuntimeError.new("cannot define name of #{element}")
   end
 
   def name_attribute(attribute)
-    return attribute.name if attribute.name 
+    return attribute.name if attribute.name
     return attribute.ref if attribute.ref
     raise RuntimeError.new("cannot define name of #{attribute}")
   end

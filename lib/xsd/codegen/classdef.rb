@@ -65,12 +65,14 @@ class ClassDef < ModuleDef
       buf << dump_emptyline # always add 1 empty line
       spacer = true
       buf << dump_innermodule
+      # puts "inner module: #{dump_innermodule}"
     end
     unless @code.empty?
       buf << dump_emptyline if spacer
       spacer = true
       buf << dump_code
     end
+    # puts "current buffer: #{buf}"
     unless @attrdef.empty?
       buf << dump_emptyline if spacer
       spacer = true
@@ -112,6 +114,7 @@ private
   def dump_attributes
     str = ""
     @attrdef.each do |attrname, writable, varname|
+      puts "attrname: #{attrname}, writable: #{writable}, varname: #{varname}"
       varname ||= attrname
       if attrname == varname
         str << format(dump_accessor(attrname, writable), 2)

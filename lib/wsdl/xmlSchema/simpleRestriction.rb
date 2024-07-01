@@ -69,6 +69,10 @@ class SimpleRestriction < Info
     !@pattern.nil?
   end
 
+  def length?
+    !@length.nil?
+  end
+
   def parse_element(element)
     puts "SimpleRestriction#parse_element: element=#{element}"
     case element

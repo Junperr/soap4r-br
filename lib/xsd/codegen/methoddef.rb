@@ -36,9 +36,11 @@ class MethodDef
     @params = params
     @comment = nil
     @definition = yield if block_given?
+    puts "MethodDef#initialize: @name=#{@name}, @params=#{@params}, @comment=#{@comment}, @definition=#{@definition}"
   end
 
   def dump
+    puts "\nMethodDef#dump: @name=#{@name}, @params=#{@params}, @comment=#{@comment}, @definition=#{@definition}"
     buf = ""
     buf << dump_comment if @comment
     buf << dump_method_def
