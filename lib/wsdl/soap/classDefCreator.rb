@@ -410,15 +410,36 @@ end")
               # puts "type name is #{create_type_name(typebase, element)}"
             end
           when WSDL::XMLSchema::Sequence
+            puts "\n\nSequence here"
             child_init_lines, child_init_params =
               parse_elements(c, element.elements, base_namespace, mpath, as_array)
+            puts "child_init_lines: #{child_init_lines}"
+            puts "child_init_params: #{child_init_params}"
             init_lines.concat(child_init_lines)
             init_params.concat(child_init_params)
           when WSDL::XMLSchema::Choice
+            puts "\n\nChoice here #{element.elements}"
+            # puts all element of element.elements
+            namecomplement = ""
+            element.elements.each do |e|
+              puts e
+              namecomplement += name_element(e).name
+            end
+            attrname = 'choice' + namecomplement
+            c.def_attr(attrname, true)
+            cChoice = ClassDef.new('Choice' + namecomplement, 'Choice')
+            cChoice.comment = "SpecificChoice for #{namecomplement}"
+            puts "cChoice: #{cChoice.dump}"
+            #todo make the initialize of choices
             child_init_lines, child_init_params =
-              parse_elements(c, element.elements, base_namespace, mpath, as_array)
-            init_lines.concat(child_init_lines)
-            init_params.concat(child_init_params)
+              parse_elements(cChoice, element.elements, base_namespace, mpath, as_array)
+            puts "child_init_lines: #{child_init_lines}"
+            puts "child_init_params: #{child_init_params}"
+            init_lines << "@#{attrname} = #{cChoice.name}.new"
+            init_params << "#{attrname} = nil"
+            # init_lines.concat(child_init_lines)
+            # init_params.concat(child_init_params)
+            c.innermodule << cChoice
           when WSDL::XMLSchema::Group
             if element.content.nil?
               warn("no group definition found: #{element}")
