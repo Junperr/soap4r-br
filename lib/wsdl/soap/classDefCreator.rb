@@ -163,7 +163,7 @@ module WSDL
 
       def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
         restriction = typedef.restriction
-        puts "restriction: #{typedef.restriction}"
+        # puts "restriction: #{typedef.restriction}"
         unless restriction.enumeration? || restriction.min_length? || restriction.max_length? || restriction.pattern? || restriction.length?
           # other restriction are not supported
           return nil
@@ -328,7 +328,7 @@ end")
     end"
           end
         end
-        # puts "\nc3: #{c.dump}\n"
+        puts "\nc3: #{c.dump}\n"
         c
       end
 
@@ -379,6 +379,7 @@ end")
               end
               inner2 = check_element(element)
               # classname = mapped_class_basename(qname, mpath)
+              # init_lines and init_params are used to make initialisation method
               if inner2
                 init_lines << "@#{varname} = #{mapped_class_basename(element.name, @modulepath)}.new\n@#{varname}.value = #{varname}"
                 if element.map_as_array?
@@ -420,17 +421,19 @@ end")
           when WSDL::XMLSchema::Choice
             puts "\n\nChoice here #{element.elements}"
             # puts all element of element.elements
+            elementNames = []
             namecomplement = ""
             element.elements.each do |e|
               puts e
               namecomplement += name_element(e).name
+              elementNames << mapped_class_basename(e.name, @modulepath)
             end
             attrname = 'choice' + namecomplement
             c.def_attr(attrname, true)
             cChoice = ClassDef.new('Choice' + namecomplement, 'Choice')
             cChoice.comment = "SpecificChoice for #{namecomplement}"
-            puts "cChoice: #{cChoice.dump}"
-            #todo make the initialize of choices
+            puts "cChoice 0: #{cChoice.dump}"
+            # todo make the initialize of choices
             child_init_lines, child_init_params =
               parse_elements(cChoice, element.elements, base_namespace, mpath, as_array)
             puts "child_init_lines: #{child_init_lines}"
@@ -439,7 +442,18 @@ end")
             init_params << "#{attrname} = nil"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
+
+            puts "cChoice 1: #{cChoice.dump}"
+            puts "hey #{elementNames}"
+            cChoice.def_method('initialize', "") do
+              lines = "super(#{init_line_choice(elementNames)})"
+              lines
+            end
+
+            puts "cChoice 2: #{cChoice.dump}"
+
             c.innermodule << cChoice
+
           when WSDL::XMLSchema::Group
             if element.content.nil?
               warn("no group definition found: #{element}")
@@ -453,6 +467,7 @@ end")
             raise RuntimeError.new("unknown type: #{element}")
           end
         end
+
         [init_lines, init_params, skip_params]
       end
 
@@ -550,6 +565,13 @@ end")
 
         arr # Return the modified array
       end
+
+      def init_line_choice(arr)
+        s = "["
+        s += arr.join(", ")
+        s += "]"
+      end
+
     end
   end
 end
