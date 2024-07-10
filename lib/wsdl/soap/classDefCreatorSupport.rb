@@ -112,11 +112,11 @@ __EOD__
             nil
           end
         elsif klass = element_basetype(element)
-          if klass.is_a?(Array)
-            klass
-          else
+          # if klass.is_a?(Array)
+          #   klass
+          # else
             klass.name
-          end
+          # end
         elsif element.type
           puts "option 3"
           mapped_class_name(element.type, modulepath)
@@ -194,20 +194,19 @@ __EOD__
       def element_basetype(ele)
         puts "option 2"
         puts "element_basetype #{ele.name} type #{ele.type} simpletype #{ele.local_simpletype}"
-        if klass = basetype_class(ele.type)
+        if (klass = basetype_class(ele.type))
           puts "option bis 1 #{klass}"
           klass_str = klass.to_s
-          if soapklass = ::SOAP::SoapToRubyMap[klass_str]
+          if (soapklass = SoapToRubyMap[klass_str])
             puts "option bis 1.5.1 #{soapklass}"
             soapklass
           else
-            puts "option bis 1.5.2 #{klass_str} #{::SOAP::SoapToRubyMap[klass_str]}"
+            puts "option bis 1.5.2 #{klass_str} #{::SoapToRubyMap[klass_str]}"
             klass
           end
         elsif ele.local_simpletype
           puts "option bis 2"
           # here we have acces to the simple type we should work here
-          # c = create_simpletypedef(@modulepath, attribute.name, attribute.local_simpletype) to generate the class
           c = create_simpletypedef(@modulepath, ele.name, ele.local_simpletype)
           if c
             name_element(ele)

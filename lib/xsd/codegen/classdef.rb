@@ -114,7 +114,7 @@ private
   def dump_attributes
     str = ""
     @attrdef.each do |attrname, writable, varname|
-      puts "attrname: #{attrname}, writable: #{writable}, varname: #{varname}"
+      # puts "attrname: #{attrname}, writable: #{writable}, varname: #{varname}"
       varname ||= attrname
       if attrname == varname
         str << format(dump_accessor(attrname, writable), 2)

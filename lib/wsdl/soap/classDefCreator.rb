@@ -47,7 +47,7 @@ module WSDL
         puts "elements: #{@elements.inspect}"
         puts "attributes: #{@attributes.inspect}"
 
-        result = "require_relative '../SimpleRes'\n" #@todo: changed depending on the structure
+        result = "require_relative '../../models/all_class'\n" #any imports you want for your class
         # cannot use @modulepath because of multiple classes
         if @modulepath
           result << "\n"
@@ -163,7 +163,7 @@ module WSDL
 
       def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
         restriction = typedef.restriction
-        # puts "restriction: #{typedef.restriction}"
+        puts "restriction: #{typedef.restriction}"
         unless restriction.enumeration? || restriction.min_length? || restriction.max_length? || restriction.pattern? || restriction.length?
           # other restriction are not supported
           return nil
@@ -171,8 +171,12 @@ module WSDL
         classname = mapped_class_basename(qname, mpath)
         c = ClassDef.new(classname, 'SimpleRestriction')
         c.comment = "#{qname}"
+        c.def_method('self.xsd_name') do
+          "\"#{qname.to_s.slice(2..-1)}\""
+        end
+        # c.def_code("@xsd_name = \"#{qname.to_s.slice(2..-1)}\"")
+        # c.def_code("@xsd_name = #{create_type_name(mpath, typedef)}")
         define_string_restriction(c, classname, restriction)
-        # define_classenum_restriction(c, classname, restriction.enumeration)
         c
       end
 
@@ -195,6 +199,7 @@ module WSDL
         end
         c
       end
+
 
       def create_simpletypedef_union(mpath, qname, typedef, qualified)
         union = typedef.union
@@ -297,14 +302,15 @@ end")
         end
         c.comment = "#{qname}"
         c.comment << "\nabstract" if typedef.abstract
-        puts "\nc1: #{c.dump}\n"
+        # puts "\nc1: #{c.dump}\n"
         parentmodule = mapped_class_name(qname, mpath)
-        init_lines, init_params, skip_params =
+        init_lines, init_params, skip_params, xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
-        puts "init_lines: #{init_lines}"
-        puts "init_params: #{init_params}"
-        puts "skip_params: #{skip_params}"
-        puts "\nc2: #{c.dump}\n"
+        # puts "init_lines: #{init_lines}"
+        # puts "init_params: #{init_params}"
+        # puts "skip_params: #{skip_params}"
+        # puts "xml_lines: #{xml_lines}"
+        # puts "\nc2: #{c.dump}\n"
         unless typedef.attributes.empty?
           define_attribute(c, typedef.attributes)
           init_lines << "@__xmlattr = {}"
@@ -328,7 +334,33 @@ end")
     end"
           end
         end
-        puts "\nc3: #{c.dump}\n"
+
+        c.def_method('self.path','') do
+          "\"//\#{self.xsd_name}\""
+        end
+
+        c.def_method('self.xsd_name', '') do
+          "\"#{qname.to_s.slice(2..-1)}\""
+        end
+        c.def_method('self.from_xml', 'xml, path=nil') do
+          "doc = Nokogiri::XML(xml)
+instance = new
+path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
+        end
+        c.def_method('to_s') do
+          "attributes = self.instance_variables.map do |var|
+      value = self.instance_variable_get(var)
+      if value.is_a?(Array)
+        value_str = value.map(&:to_s).join(', ')
+        \"\#{var}: [\#{value_str}]\"
+      else
+        \"\#{var}: \#{value}\"
+      end
+    end
+    \"\#{self.class.name}: {\#{attributes.join(\", \")}}\""
+        end
+
+        # puts "\nc3: #{c.dump}\n"
         c
       end
 
@@ -336,6 +368,7 @@ end")
         init_lines = []
         init_params = []
         skip_params = []
+        xml_lines = []
         any = false
         elements.each do |element|
           puts "\nelement: #{element} #{element.inspect}"
@@ -381,7 +414,9 @@ end")
               # classname = mapped_class_basename(qname, mpath)
               # init_lines and init_params are used to make initialisation method
               if inner2
-                init_lines << "@#{varname} = #{mapped_class_basename(element.name, @modulepath)}.new\n@#{varname}.value = #{varname}"
+                elemClass = mapped_class_basename(element.name, @modulepath)
+                init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
+                xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc)"
                 if element.map_as_array?
                   init_params << "#{varname} = []"
                 else
@@ -392,14 +427,12 @@ end")
                 typebase = mpath
               else
                 typename = create_type_name(typebase, element)
-                if typename.is_a?(Array)
-                  types_check = typename.map { |type| "#{varname}.is_a?(#{type})" }.join(' || ')
-                  types_list = typename.join(' or ')
-                  init_lines << "unless #{types_check}\n  raise ArgumentError, \"#{varname} must be #{types_list}\"\nend"
-                else
-                  init_lines << "unless #{varname}.is_a?(#{typename})\n  raise ArgumentError,\"#{varname} must be #{typename}\"\nend"
-                end
-                init_lines << "@#{varname} = #{varname}"
+
+                init_lines << "@#{varname} = #{typename}.new"
+                init_lines << "@#{varname}.value = #{varname} if #{varname}"
+
+                xml_lines << "instance.#{varname} = #{typename}.from_xml(doc, path + '/#{name}')"
+
                 if element.map_as_array?
                   init_params << "#{varname} = []"
                 else
@@ -412,12 +445,16 @@ end")
             end
           when WSDL::XMLSchema::Sequence
             puts "\n\nSequence here"
-            child_init_lines, child_init_params =
+            child_init_lines, child_init_params , child_skip_params, child_xml_lines =
               parse_elements(c, element.elements, base_namespace, mpath, as_array)
             puts "child_init_lines: #{child_init_lines}"
             puts "child_init_params: #{child_init_params}"
+            puts "child_skip_params: #{child_skip_params}"
+            puts "child_xml_lines: #{child_xml_lines}"
             init_lines.concat(child_init_lines)
             init_params.concat(child_init_params)
+            skip_params.concat(child_skip_params)
+            xml_lines.concat(child_xml_lines)
           when WSDL::XMLSchema::Choice
             puts "\n\nChoice here #{element.elements}"
             # puts all element of element.elements
@@ -432,25 +469,28 @@ end")
             c.def_attr(attrname, true)
             cChoice = ClassDef.new('Choice' + namecomplement, 'Choice')
             cChoice.comment = "SpecificChoice for #{namecomplement}"
-            puts "cChoice 0: #{cChoice.dump}"
-            # todo make the initialize of choices
-            child_init_lines, child_init_params =
+            puts "cChoice : #{cChoice.dump}"
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
               parse_elements(cChoice, element.elements, base_namespace, mpath, as_array)
             puts "child_init_lines: #{child_init_lines}"
             puts "child_init_params: #{child_init_params}"
+            puts "child_skip_params: #{child_skip_params}"
+            puts "child_xml_lines: #{child_xml_lines}"
             init_lines << "@#{attrname} = #{cChoice.name}.new"
             init_params << "#{attrname} = nil"
+            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc)"
+            puts "added xml line to #{xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
 
-            puts "cChoice 1: #{cChoice.dump}"
-            puts "hey #{elementNames}"
+            # puts "cChoice 1: #{cChoice.dump}"
+            # puts "hey #{elementNames}"
             cChoice.def_method('initialize', "") do
               lines = "super(#{init_line_choice(elementNames)})"
               lines
             end
 
-            puts "cChoice 2: #{cChoice.dump}"
+            # puts "cChoice 2: #{cChoice.dump}"
 
             c.innermodule << cChoice
 
@@ -459,22 +499,25 @@ end")
               warn("no group definition found: #{element}")
               next
             end
-            child_init_lines, child_init_params =
+            child_init_lines, child_init_params , child_skip_params, child_xml_lines =
               parse_elements(c, element.content.elements, base_namespace, mpath, as_array)
             init_lines.concat(child_init_lines)
             init_params.concat(child_init_params)
+            skip_params.concat(child_skip_params)
+            xml_lines.concat(child_xml_lines)
           else
             raise RuntimeError.new("unknown type: #{element}")
           end
         end
 
-        [init_lines, init_params, skip_params]
+        [init_lines, init_params, skip_params, xml_lines]
       end
 
       def check_element(element)
         if element.local_simpletype
           c = create_simpletypedef(@modulepath, element.name, element.local_simpletype)
           c
+        elsif element.local_complextype
         end
       end
 
@@ -567,9 +610,8 @@ end")
       end
 
       def init_line_choice(arr)
-        s = "["
-        s += arr.join(", ")
-        s += "]"
+        s = arr.map { |elem| "#{elem}:#{elem}" }.join(", ")
+        s
       end
 
     end

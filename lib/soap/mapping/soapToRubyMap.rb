@@ -1,29 +1,29 @@
 require 'bigdecimal'
 require 'date'
 require 'time'
+require_relative '../../xsd/models/all_class'
 
-module SOAP
-  SoapToRubyMap = {
-    'SOAP::SOAPInteger' => Integer,
-    'SOAP::SOAPNonPositiveInteger' => Integer,
-    'SOAP::SOAPNegativeInteger' => Integer,
-    'SOAP::SOAPLong' => Integer,
-    'SOAP::SOAPInt' => Integer,
-    'SOAP::SOAPShort' => Integer,
-    'SOAP::SOAPByte' => Integer,
-    'SOAP::SOAPNonNegativeInteger' => Integer,
-    'SOAP::SOAPUnsignedLong' => Integer,
-    'SOAP::SOAPUnsignedInt' => Integer,
-    'SOAP::SOAPUnsignedShort' => Integer,
-    'SOAP::SOAPUnsignedByte' => Integer,
-    'SOAP::SOAPPositiveInteger' => Integer,
-    'SOAP::SOAPBoolean' => [TrueClass, FalseClass], #peculiar case
-    'SOAP::SOAPDecimal' => BigDecimal,
-    'SOAP::SOAPFloat' => Float,
-    'SOAP::SOAPDouble' => Float,
-    'SOAP::SOAPDuration' => String,
-    'SOAP::SOAPDateTime' => DateTime,
-    'SOAP::SOAPTime' => Time,
-    'SOAP::SOAPDate' => Date
-  }.freeze
-end
+SoapToRubyMap = {
+  'SOAP::SOAPInteger' => ParsedInteger,
+  'SOAP::SOAPNonPositiveInteger' => ParsedInteger,
+  'SOAP::SOAPNegativeInteger' => ParsedInteger,
+  'SOAP::SOAPLong' => ParsedInteger,
+  'SOAP::SOAPInt' => ParsedInteger,
+  'SOAP::SOAPShort' => ParsedInteger,
+  'SOAP::SOAPByte' => ParsedInteger,
+  'SOAP::SOAPNonNegativeInteger' => ParsedInteger,
+  'SOAP::SOAPUnsignedLong' => ParsedInteger,
+  'SOAP::SOAPUnsignedInt' => ParsedInteger,
+  'SOAP::SOAPUnsignedShort' => ParsedInteger,
+  'SOAP::SOAPUnsignedByte' => ParsedInteger,
+  'SOAP::SOAPPositiveInteger' => ParsedInteger,
+  'SOAP::SOAPBoolean' => ParsedBoolean,
+  'SOAP::SOAPDecimal' => ParsedBigDecimal,
+  'SOAP::SOAPFloat' => ParsedFloat,
+  'SOAP::SOAPDouble' => ParsedFloat,
+  'SOAP::SOAPDuration' => ParsedString,
+  'SOAP::SOAPDateTime' => ParsedDateTime,
+  'SOAP::SOAPTime' => ParsedTime,
+  'SOAP::SOAPDate' => ParsedDate,
+  'SOAP::SOAPBase64' => ParsedBase64Binary
+}.freeze
