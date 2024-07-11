@@ -26,9 +26,9 @@ class MinInclusive < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:mininclusive] = to_boolean(value)
+      parent.fixed[:min_inclusive] = to_boolean(value)
     when ValueAttrName
-      parent.mininclusive = value.source
+      parent.min_inclusive = value.source
     end
   end
 end

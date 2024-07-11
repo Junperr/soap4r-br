@@ -26,9 +26,9 @@ class TotalDigits < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:totaldigits] = to_boolean(value)
+      parent.fixed[:total_digits] = to_boolean(value)
     when ValueAttrName
-      parent.totaldigits = to_int(value)
+      parent.total_digits = to_int(value)
     end
   end
 end

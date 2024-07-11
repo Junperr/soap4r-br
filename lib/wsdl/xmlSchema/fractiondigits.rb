@@ -26,9 +26,9 @@ class FractionDigits < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:fractiondigits] = to_boolean(value)
+      parent.fixed[:fraction_digits] = to_boolean(value)
     when ValueAttrName
-      parent.fractiondigits = to_int(value)
+      parent.fraction_digits = to_int(value)
     end
   end
 end

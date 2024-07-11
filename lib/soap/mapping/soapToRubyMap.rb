@@ -25,5 +25,6 @@ SoapToRubyMap = {
   'SOAP::SOAPDateTime' => ParsedDateTime,
   'SOAP::SOAPTime' => ParsedTime,
   'SOAP::SOAPDate' => ParsedDate,
-  'SOAP::SOAPBase64' => ParsedBase64Binary
+  'SOAP::SOAPBase64' => ParsedBase64Binary,
+'SOAP::SOAPString' => ParsedString
 }.freeze

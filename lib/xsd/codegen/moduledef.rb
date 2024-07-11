@@ -121,6 +121,13 @@ private
   end
 
   def dump_innermodule
+    # Assuming @innermodule is a collection of objects
+# @innermodule.each do |moduledef|
+#   puts "Dump for moduledef:"
+#   puts moduledef.dump
+#   puts "-" * 40  # Separator for better readability
+# end
+
     dump_static(
       @innermodule.collect { |moduledef|
         moduledef.dump

@@ -22,13 +22,13 @@ class SimpleRestriction < Info
   attr_accessor :maxlength
   attr_accessor :pattern
   attr_reader :enumeration
-  attr_accessor :whitespace
-  attr_accessor :maxinclusive
-  attr_accessor :maxexclusive
-  attr_accessor :minexclusive
-  attr_accessor :mininclusive
-  attr_accessor :totaldigits
-  attr_accessor :fractiondigits
+  attr_accessor :white_space
+  attr_accessor :max_inclusive
+  attr_accessor :max_exclusive
+  attr_accessor :min_exclusive
+  attr_accessor :min_inclusive
+  attr_accessor :total_digits
+  attr_accessor :fraction_digits
   attr_reader :fixed
   attr_reader :attributes
 
@@ -40,6 +40,13 @@ class SimpleRestriction < Info
     @maxlength = nil
     @minlength = nil
     @pattern = nil
+    @white_space = nil
+    @max_inclusive = nil
+    @max_exclusive = nil
+    @min_exclusive = nil
+    @min_inclusive = nil
+    @total_digits = nil
+    @fraction_digits = nil
     @fixed = {}
     @attributes = XSD::NamedElements.new
   end
@@ -71,6 +78,34 @@ class SimpleRestriction < Info
 
   def length?
     !@length.nil?
+  end
+
+  def min_inclusive?
+    !@min_inclusive.nil?
+  end
+
+  def max_inclusive?
+    !@max_inclusive.nil?
+  end
+
+  def min_exclusive?
+    !@min_exclusive.nil?
+  end
+
+  def max_exclusive?
+    !@max_exclusive.nil?
+  end
+
+  def total_digits?
+    !@total_digits.nil?
+  end
+
+  def fraction_digits?
+    !@fraction_digits.nil?
+  end
+
+  def white_space?
+    !@white_space.nil?
   end
 
   def parse_element(element)
@@ -134,13 +169,13 @@ class SimpleRestriction < Info
       maxlength: #{@maxlength}
       pattern: #{@pattern}
       enumeration: #{@enumeration.join(', ')}
-      whitespace: #{@whitespace}
-      maxinclusive: #{@maxinclusive}
-      maxexclusive: #{@maxexclusive}
-      minexclusive: #{@minexclusive}
-      mininclusive: #{@mininclusive}
-      totaldigits: #{@totaldigits}
-      fractiondigits: #{@fractiondigits}
+      whitespace: #{@white_space}
+      maxinclusive: #{@max_inclusive}
+      maxexclusive: #{@max_exclusive}
+      minexclusive: #{@min_exclusive}
+      mininclusive: #{@min_inclusive}
+      totaldigits: #{@total_digits}
+      fractiondigits: #{@fraction_digits}
       fixed: #{@fixed}
       attributes: #{@attributes}
       initialise: enumeration: [\"#{@enumeration.join('", "')}\"], min_length: #{@minlength}, max_length:  #{@maxlength}, pattern: #{@pattern}

@@ -26,9 +26,9 @@ class MaxInclusive < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:maxinclusive] = to_boolean(value)
+      parent.fixed[:max_inclusive] = to_boolean(value)
     when ValueAttrName
-      parent.maxinclusive = value.source
+      parent.max_inclusive = value.source
     end
   end
 end

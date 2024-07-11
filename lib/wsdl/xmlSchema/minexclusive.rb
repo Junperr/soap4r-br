@@ -26,9 +26,9 @@ class MinExclusive < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:minexclusive] = to_boolean(value)
+      parent.fixed[:min_exclusive] = to_boolean(value)
     when ValueAttrName
-      parent.minexclusive = value.source
+      parent.min_exclusive = value.source
     end
   end
 end

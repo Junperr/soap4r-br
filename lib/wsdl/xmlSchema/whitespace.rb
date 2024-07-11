@@ -26,9 +26,9 @@ class WhiteSpace < Info
   def parse_attr(attr, value)
     case attr
     when FixedAttrName
-      parent.fixed[:whitespace] = to_boolean(value)
+      parent.fixed[:white_space] = to_boolean(value)
     when ValueAttrName
-      parent.whitespace = value.source
+      parent.white_space = value.source
     end
   end
 end

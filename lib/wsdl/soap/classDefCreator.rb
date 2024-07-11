@@ -47,7 +47,7 @@ module WSDL
         puts "elements: #{@elements.inspect}"
         puts "attributes: #{@attributes.inspect}"
 
-        result = "require_relative '../../models/all_class'\n" #any imports you want for your class
+        result = "require_relative '../../models/all_class'\n" # any imports you want for your class
         # cannot use @modulepath because of multiple classes
         if @modulepath
           result << "\n"
@@ -161,22 +161,42 @@ module WSDL
         end
       end
 
+      def newtype?
+        # code here
+      end
+
       def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
         restriction = typedef.restriction
         puts "restriction: #{typedef.restriction}"
-        unless restriction.enumeration? || restriction.min_length? || restriction.max_length? || restriction.pattern? || restriction.length?
-          # other restriction are not supported
+        puts "type.base: #{basetype_class(typedef.base)}"
+        puts "soapbase : #{SoapToRubyMap[basetype_class(typedef.base).to_s]}"
+        soaptype = basetype_class(typedef.base)
+        newtype = SoapToRubyMap[soaptype.to_s]
+        unless restriction.enumeration? || restriction.min_length? || restriction.max_length? || restriction.pattern? ||
+          restriction.length? || restriction.min_inclusive? || restriction.max_inclusive? || restriction.min_exclusive? ||
+          restriction.max_exclusive? || restriction.total_digits? || restriction.fraction_digits? || restriction.white_space? ||
+          !newtype.nil?
+          # has no restriction
           return nil
         end
         classname = mapped_class_basename(qname, mpath)
-        c = ClassDef.new(classname, 'SimpleRestriction')
+        c = ClassDef.new(classname, 'RestrictedBasicType')
         c.comment = "#{qname}"
         c.def_method('self.xsd_name') do
           "\"#{qname.to_s.slice(2..-1)}\""
         end
-        # c.def_code("@xsd_name = \"#{qname.to_s.slice(2..-1)}\"")
-        # c.def_code("@xsd_name = #{create_type_name(mpath, typedef)}")
-        define_string_restriction(c, classname, restriction)
+        restrictions = define_string_restriction(restriction)
+
+        c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}") do
+          "super(type, soap_type, restrictions)"
+        end
+        c.def_method('self.from_xml', "doc, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}") do
+          "element = doc.at_xpath(self.path)
+    return nil unless element
+    instance = new(type, soap_type, restrictions)
+    instance.value = element.content
+    instance"
+        end
         c
       end
 
@@ -199,7 +219,6 @@ module WSDL
         end
         c
       end
-
 
       def create_simpletypedef_union(mpath, qname, typedef, qualified)
         union = typedef.union
@@ -225,15 +244,23 @@ module WSDL
         end
       end
 
-      def define_string_restriction(c, classname, restriction)
-        enum_str = !restriction.enumeration? ? 'nil' : "[#{restriction.enumeration.map { |e| "\"#{e}\"" }.join(', ')}]"
-        min_length_str = !restriction.min_length? ? 'nil' : restriction.minlength
-        max_length_str = !restriction.max_length? ? 'nil' : restriction.maxlength
-        length_str = !restriction.length? ? 'nil' : restriction.length
-        pattern_str = !restriction.pattern? ? 'nil' : "/#{restriction.pattern.source}/"
-        c.def_code("def initialize(enumeration: #{enum_str}, min_length: #{min_length_str}, max_length: #{max_length_str}, length: #{length_str}, pattern: #{pattern_str})
-  super(enumeration: enumeration, min_length: min_length, max_length: max_length, length: length, pattern: pattern)
-end")
+      def define_string_restriction(restriction)
+        restrictions = {
+          enumeration: restriction.enumeration? ? "[#{restriction.enumeration.map { |e| "\"#{e}\"" }.join(', ')}]" : nil,
+          min_length: restriction.min_length? ? restriction.minlength : nil,
+          max_length: restriction.max_length? ? restriction.maxlength : nil,
+          length: restriction.length? ? restriction.length : nil,
+          pattern: restriction.pattern? ? "/#{restriction.pattern.source}/" : nil,
+          min_inclusive: restriction.min_inclusive? ? restriction.min_inclusive : nil,
+          max_inclusive: restriction.max_inclusive? ? restriction.max_inclusive : nil,
+          min_exclusive: restriction.min_exclusive? ? restriction.min_exclusive : nil,
+          max_exclusive: restriction.max_exclusive? ? restriction.max_exclusive : nil,
+          total_digits: restriction.total_digits? ? restriction.total_digits : nil,
+          fraction_digits: restriction.fraction_digits? ? restriction.fraction_digits : nil,
+          white_space: restriction.white_space? ? "'#{restriction.white_space}'" : nil
+        }
+
+        "{#{restrictions.map { |key, value| "#{key}: #{value}" unless value.nil? }.compact.join(', ')}}"
       end
 
       def define_classenum_restriction(c, classname, enumeration)
@@ -304,6 +331,8 @@ end")
         c.comment << "\nabstract" if typedef.abstract
         # puts "\nc1: #{c.dump}\n"
         parentmodule = mapped_class_name(qname, mpath)
+
+        # define all elements and attributes inside itself
         init_lines, init_params, skip_params, xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
         # puts "init_lines: #{init_lines}"
@@ -323,6 +352,7 @@ end")
           init_lines.join("\n")
 
         end
+        # for min_occur = 0
         unless skip_params.empty?
           c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
             "instance_variables.any? do |var|
@@ -335,7 +365,7 @@ end")
           end
         end
 
-        c.def_method('self.path','') do
+        c.def_method('self.path', '') do
           "\"//\#{self.xsd_name}\""
         end
 
@@ -343,9 +373,13 @@ end")
           "\"#{qname.to_s.slice(2..-1)}\""
         end
         c.def_method('self.from_xml', 'xml, path=nil') do
-          "doc = Nokogiri::XML(xml)
-instance = new
-path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
+          "if path
+        doc = xml
+        else
+      doc = Nokogiri::XML(xml)
+      end
+      instance = new
+      path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
         end
         c.def_method('to_s') do
           "attributes = self.instance_variables.map do |var|
@@ -427,7 +461,10 @@ path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
                 typebase = mpath
               else
                 typename = create_type_name(typebase, element)
-
+                # if typename == SOAP::SOAPNonNegativeInteger
+                puts "typename is #{typename}"
+                puts "should be #{SoapToRubyMap[element.type]}"
+                # end
                 init_lines << "@#{varname} = #{typename}.new"
                 init_lines << "@#{varname}.value = #{varname} if #{varname}"
 
@@ -445,7 +482,7 @@ path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
             end
           when WSDL::XMLSchema::Sequence
             puts "\n\nSequence here"
-            child_init_lines, child_init_params , child_skip_params, child_xml_lines =
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
               parse_elements(c, element.elements, base_namespace, mpath, as_array)
             puts "child_init_lines: #{child_init_lines}"
             puts "child_init_params: #{child_init_params}"
@@ -478,7 +515,7 @@ path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
             puts "child_xml_lines: #{child_xml_lines}"
             init_lines << "@#{attrname} = #{cChoice.name}.new"
             init_params << "#{attrname} = nil"
-            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc)"
+            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc, path)"
             puts "added xml line to #{xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
@@ -499,7 +536,7 @@ path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
               warn("no group definition found: #{element}")
               next
             end
-            child_init_lines, child_init_params , child_skip_params, child_xml_lines =
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
               parse_elements(c, element.content.elements, base_namespace, mpath, as_array)
             init_lines.concat(child_init_lines)
             init_params.concat(child_init_params)

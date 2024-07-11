@@ -16,11 +16,14 @@ class BasicType
     @value_str = new_value
   end
 
-  def self.from_xml(element)
+  def self.from_xml(doc, path)
+    element = doc.at_xpath(path)
+    return nil unless element
     instance = new('String')
     instance.value = element.content
     instance
   end
+
 
   def to_s
     @value_str
@@ -29,6 +32,7 @@ class BasicType
   private
 
   def validate(value)
+    # puts "Validating #{value} as #{@type} #{self.class}"
     case @type
     when 'String'
       check_string(value)
@@ -44,8 +48,10 @@ class BasicType
       check_time(value)
     when 'Date'
       check_date(value)
-    when :'BigDecimal'
+    when 'BigDecimal'
       check_big_decimal(value)
+    when 'Base64Binary'
+      check_base64_binary(value)
     else
       raise ArgumentError, "Unsupported type: #{@type}"
     end
@@ -101,6 +107,28 @@ class BasicType
     BigDecimal(value)
   rescue ArgumentError
     raise ArgumentError, "Invalid BigDecimal format"
+  end
+
+  def check_base64_binary(value)
+    raise ArgumentError, "Invalid base64Binary" unless value.is_a?(String) && value.match?(/\A[A-Za-z0-9+\/=]+\z/)
+    value
+  end
+
+  def self.enclosing_class
+    name_parts = self.name.split('::')
+    # Ensure there is at least one parent class
+    if name_parts.length > 1
+      # Get the parent class name
+      parent_class_name = name_parts[0...-1].join('::')
+      # Find the class object for the parent class name
+      Object.const_get(parent_class_name)
+    else
+      nil
+    end
+  end
+
+  def self.path
+    self.enclosing_class.path + "/#{self.xsd_name}"
   end
 
 end
