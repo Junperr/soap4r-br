@@ -71,7 +71,8 @@ class ComplexType < Info
 
   def elements
     if c = @complexcontent || @content
-      c.elements
+      o = XSD::NamedElements.new()
+      o << c
     else
       XSD::NamedElements::Empty
     end
@@ -143,6 +144,7 @@ class ComplexType < Info
   end
 
   def parse_element(element)
+    puts "ComplexType#parse_element: element=#{element}"
     case element
     when AllName
       @content = All.new
