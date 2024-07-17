@@ -70,6 +70,7 @@ class Schema < Info
     when ComplexTypeName
       o = ComplexType.new
       @complextypes << o
+      puts "Was complex type o=#{o}"
       o
     when SimpleTypeName
       o = SimpleType.new
@@ -78,6 +79,7 @@ class Schema < Info
     when ElementName
       o = Element.new
       o.form = 'qualified'      # root element is qualified
+      puts "Was element o=#{o}"
       @elements << o
       o
     when AttributeName
@@ -167,6 +169,7 @@ class Schema < Info
   end
 
   def self.parse_element(element)
+    puts "\n\nSchema.parse_element: element=#{element}"
     if element == SchemaName
       Schema.new
     else

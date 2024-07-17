@@ -189,6 +189,21 @@ class ComplexType < Info
       nil
     end
   end
+
+  def to_s
+  str = "ComplexType: #{name}\n"
+  str += "  Abstract: #{abstract}\n"
+  str += "  Final: #{final}\n"
+  str += "  Mixed: #{mixed}\n"
+  str += "  Complex Content: #{complexcontent}\n" if complexcontent
+  str += "  Simple Content: #{simplecontent}\n" if simplecontent
+  str += "  Content: #{content}\n" if content
+  str += "  Attributes: #{attributes.size}\n" unless attributes.empty?
+  str += "  Elements: #{elements.size}\n" unless elements.empty?
+  str += " Choices: #{choice?}\n"
+  str
+end
+
 end
 
 

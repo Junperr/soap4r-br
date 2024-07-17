@@ -27,21 +27,26 @@ class Sequence < Content
   end
 
   def parse_element(element)
+    puts "Sequence#parse_element: element=#{element}"
     case element
     when SequenceName
       o = Sequence.new
+      puts "was sequence #{o}"
       @elements << o
       o
     when ChoiceName
       o = Choice.new
+      puts "was choice #{o}"
       @elements << o
       o
     when GroupName
       o = Group.new
+      puts "was group #{o}"
       @elements << o
       o
     when AnyName
       @any = Any.new
+      puts "was any #{@any}"
       @elements << @any
       @any
     else

@@ -115,7 +115,7 @@ __EOD__
           # if klass.is_a?(Array)
           #   klass
           # else
-            klass.name
+          klass.name
           # end
         elsif element.type
           puts "option 3"
@@ -240,8 +240,35 @@ __EOD__
       end
 
       def name_element(element)
-        return element.name if element.name
-        return element.ref if element.ref
+        if element.respond_to?(:name)
+          return element.name if element.name
+        end
+
+        if element.respond_to?(:ref)
+          return element.ref if element.ref
+        end
+
+        # puts "look here #{element}"
+        puts element.elements.size
+        if element.elements.size > 0
+          # puts "has elements"
+          namecomplement = ""
+          element.elements.each do |e|
+            namecomplement += name_element(e).name
+          end
+          # puts "namecomplement for #{element} #{namecomplement}"
+          case element
+          when WSDL::XMLSchema::Sequence
+            return XSD::QName.new("", "Sequence#{namecomplement}")
+          when WSDL::XMLSchema::Choice
+            return XSD::QName.new("", "Choice#{namecomplement}")
+          when WSDL::XMLSchema::All
+            return XSD::QName.new("", "All#{namecomplement}")
+          else
+            raise RuntimeError.new("cannot define name of element with elements #{element}")
+          end
+        end
+
         raise RuntimeError.new("cannot define name of #{element}")
       end
 

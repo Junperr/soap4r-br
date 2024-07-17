@@ -40,7 +40,7 @@ module WSDL
       end
 
       def dump(type = nil)
-        puts "Dumping class definition..."
+        puts "\n\nDumping class definition..."
         puts "group: #{@modelgroups.inspect}"
         puts "simpletype: #{@simpletypes.inspect}"
         puts "complextypes: #{@complextypes.inspect}"
@@ -136,6 +136,8 @@ module WSDL
         qualified = (ele.elementform == 'qualified')
         if ele.local_complextype
           puts "Creating complex type: #{ele.name}"
+          puts "ele.chid.size: #{ele.local_complextype.elements.size}"
+          puts "ele.content: #{ele.local_complextype.content}"
           create_complextypedef(mpath, ele.name, ele.local_complextype, qualified)
         elsif ele.local_simpletype
           puts "Creating simple type: #{ele.name}"
@@ -247,17 +249,17 @@ module WSDL
       def define_string_restriction(restriction)
         restrictions = {
           enumeration: restriction.enumeration? ? "[#{restriction.enumeration.map { |e| "\"#{e}\"" }.join(', ')}]" : nil,
-          min_length: restriction.min_length? ? restriction.minlength : nil,
-          max_length: restriction.max_length? ? restriction.maxlength : nil,
+          minLength: restriction.min_length? ? restriction.minlength : nil,
+          maxLength: restriction.max_length? ? restriction.maxlength : nil,
           length: restriction.length? ? restriction.length : nil,
           pattern: restriction.pattern? ? "/#{restriction.pattern.source}/" : nil,
-          min_inclusive: restriction.min_inclusive? ? restriction.min_inclusive : nil,
-          max_inclusive: restriction.max_inclusive? ? restriction.max_inclusive : nil,
-          min_exclusive: restriction.min_exclusive? ? restriction.min_exclusive : nil,
-          max_exclusive: restriction.max_exclusive? ? restriction.max_exclusive : nil,
-          total_digits: restriction.total_digits? ? restriction.total_digits : nil,
-          fraction_digits: restriction.fraction_digits? ? restriction.fraction_digits : nil,
-          white_space: restriction.white_space? ? "'#{restriction.white_space}'" : nil
+          minInclusive: restriction.min_inclusive? ? restriction.min_inclusive : nil,
+          maxInclusive: restriction.max_inclusive? ? restriction.max_inclusive : nil,
+          minExclusive: restriction.min_exclusive? ? restriction.min_exclusive : nil,
+          maxExclusive: restriction.max_exclusive? ? restriction.max_exclusive : nil,
+          totalDigits: restriction.total_digits? ? restriction.total_digits : nil,
+          fractionDigits: restriction.fraction_digits? ? restriction.fraction_digits : nil,
+          whiteSpace: restriction.white_space? ? "'#{restriction.white_space}'" : nil
         }
 
         "{#{restrictions.map { |key, value| "#{key}: #{value}" unless value.nil? }.compact.join(', ')}}"
@@ -295,7 +297,6 @@ module WSDL
         case type.compoundtype
         when :TYPE_STRUCT, :TYPE_EMPTY
           create_structdef(mpath, qname, type, qualified)
-
         when :TYPE_ARRAY
           create_arraydef(mpath, qname, type)
         when :TYPE_SIMPLE
@@ -313,9 +314,11 @@ module WSDL
         classname = mapped_class_basename(qname, mpath)
         baseclassname = nil
         if typedef.complexcontent
+          puts "typedef.complexcontent.base: #{typedef.complexcontent.base}"
           if base = typedef.complexcontent.base
             # :TYPE_ARRAY must not be derived (#424)
             basedef = @complextypes[base]
+            puts "basedef: #{basedef}"
             if basedef and basedef.compoundtype != :TYPE_ARRAY
               # baseclass should be a toplevel complexType
               baseclassname = mapped_class_basename(base, @modulepath)
@@ -326,6 +329,8 @@ module WSDL
           c = ClassDef.new(classname, '::StandardError')
         else
           c = ClassDef.new(classname, baseclassname)
+          puts "typedef.content: #{typedef.content}"
+          puts "class name: #{classname} #{baseclassname}"
         end
         c.comment = "#{qname}"
         c.comment << "\nabstract" if typedef.abstract
@@ -335,10 +340,10 @@ module WSDL
         # define all elements and attributes inside itself
         init_lines, init_params, skip_params, xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
-        # puts "init_lines: #{init_lines}"
-        # puts "init_params: #{init_params}"
-        # puts "skip_params: #{skip_params}"
-        # puts "xml_lines: #{xml_lines}"
+        puts "init_lines: #{init_lines}"
+        puts "init_params: #{init_params}"
+        puts "skip_params: #{skip_params}"
+        puts "xml_lines: #{xml_lines}"
         # puts "\nc2: #{c.dump}\n"
         unless typedef.attributes.empty?
           define_attribute(c, typedef.attributes)
@@ -360,7 +365,9 @@ module WSDL
       next if allowed_nil_attributes.include?(var[1..].to_sym)
 
       value = instance_variable_get(var)
-      value.nil? || (value.respond_to?(:empty?) && value.empty?)
+      if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        raise ArgumentError, \"Attribute '\#{var[1..]}' cannot be nil or empty\"
+      end
     end"
           end
         end
@@ -372,6 +379,11 @@ module WSDL
         c.def_method('self.xsd_name', '') do
           "\"#{qname.to_s.slice(2..-1)}\""
         end
+
+        unless skip_params.empty?
+          xml_lines << "instance.any_nil_or_empty?"
+        end
+
         c.def_method('self.from_xml', 'xml, path=nil') do
           "if path
         doc = xml
@@ -420,6 +432,7 @@ module WSDL
             end
             init_lines << "@__xmlele_any = nil"
           when XMLSchema::Element
+            puts "element #{element} is element "
             next if element.ref == SchemaName
             name = name_element(element).name
             typebase = @modulepath
@@ -452,7 +465,7 @@ module WSDL
                 init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
                 xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc)"
                 if element.map_as_array?
-                  init_params << "#{varname} = []"
+                  init_params << "#{varname} = nil"#todo really handle array
                 else
                   init_params << "#{varname} = nil"
                 end
@@ -481,7 +494,7 @@ module WSDL
               # puts "type name is #{create_type_name(typebase, element)}"
             end
           when WSDL::XMLSchema::Sequence
-            puts "\n\nSequence here"
+            puts "\nSequence here with size #{element.elements.size}"
             child_init_lines, child_init_params, child_skip_params, child_xml_lines =
               parse_elements(c, element.elements, base_namespace, mpath, as_array)
             puts "child_init_lines: #{child_init_lines}"
@@ -493,14 +506,13 @@ module WSDL
             skip_params.concat(child_skip_params)
             xml_lines.concat(child_xml_lines)
           when WSDL::XMLSchema::Choice
-            puts "\n\nChoice here #{element.elements}"
-            # puts all element of element.elements
+            puts "\nChoice here with size #{element.elements.size}" # puts all element of element.elements
             elementNames = []
             namecomplement = ""
             element.elements.each do |e|
               puts e
               namecomplement += name_element(e).name
-              elementNames << mapped_class_basename(e.name, @modulepath)
+              elementNames << mapped_class_basename(name_element(e), @modulepath)
             end
             attrname = 'choice' + namecomplement
             c.def_attr(attrname, true)

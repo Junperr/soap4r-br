@@ -123,7 +123,9 @@ private
         # only the first annotation element is allowed for each element.
         o = Annotation.new
       else
+        puts "\nparent=#{parent.inspect} elename=#{elename}"
         o = parent.parse_element(elename)
+        puts "o=#{o.inspect}\n"
       end
       if o.nil?
         unless @ignored.key?(elename)

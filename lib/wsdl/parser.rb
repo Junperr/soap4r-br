@@ -125,6 +125,7 @@ private
         # only the first annotation element is allowed for each xsd element.
         o = XMLSchema::Annotation.new
       else
+        puts "parent=#{parent}"
         o = parent.parse_element(elename)
       end
       if o.nil?
