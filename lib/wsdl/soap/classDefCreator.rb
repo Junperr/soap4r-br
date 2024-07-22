@@ -169,7 +169,7 @@ module WSDL
 
       def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
         restriction = typedef.restriction
-        puts "restriction: #{typedef.restriction}"
+        puts "restriction: #{typedef.restriction} #{typedef.restriction.pattern}"
         puts "type.base: #{basetype_class(typedef.base)}"
         puts "soapbase : #{SoapToRubyMap[basetype_class(typedef.base).to_s]}"
         soaptype = basetype_class(typedef.base)
@@ -189,10 +189,10 @@ module WSDL
         end
         restrictions = define_string_restriction(restriction)
 
-        c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}") do
+        c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
           "super(type, soap_type, restrictions)"
         end
-        c.def_method('self.from_xml', "doc, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}") do
+        c.def_method('self.from_xml', "doc, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
           "element = doc.at_xpath(self.path)
     return nil unless element
     instance = new(type, soap_type, restrictions)
@@ -252,7 +252,8 @@ module WSDL
           minLength: restriction.min_length? ? restriction.minlength : nil,
           maxLength: restriction.max_length? ? restriction.maxlength : nil,
           length: restriction.length? ? restriction.length : nil,
-          pattern: restriction.pattern? ? "/#{restriction.pattern.source}/" : nil,
+          # Initialize pattern as nil, will be updated if patterns are present
+          pattern: nil,
           minInclusive: restriction.min_inclusive? ? restriction.min_inclusive : nil,
           maxInclusive: restriction.max_inclusive? ? restriction.max_inclusive : nil,
           minExclusive: restriction.min_exclusive? ? restriction.min_exclusive : nil,
@@ -261,6 +262,16 @@ module WSDL
           fractionDigits: restriction.fraction_digits? ? restriction.fraction_digits : nil,
           whiteSpace: restriction.white_space? ? "'#{restriction.white_space}'" : nil
         }
+
+        # Check if pattern is present and is an array
+        if restriction.pattern? && restriction.pattern.is_a?(Array)
+          pattern_strings = restriction.pattern.map do |pattern|
+            "/#{pattern.source}/"
+          end
+          restrictions[:pattern] = "[#{pattern_strings.join(', ')}]"
+        end
+
+        restrictions
 
         "{#{restrictions.map { |key, value| "#{key}: #{value}" unless value.nil? }.compact.join(', ')}}"
       end
@@ -340,6 +351,7 @@ module WSDL
         # define all elements and attributes inside itself
         init_lines, init_params, skip_params, xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
+        init_params << "can_be_empty = false"
         puts "init_lines: #{init_lines}"
         puts "init_params: #{init_params}"
         puts "skip_params: #{skip_params}"
@@ -352,12 +364,13 @@ module WSDL
         # handle initialize method
         c.def_method('initialize', *init_params) do
           unless skip_params.empty?
-            init_lines << "any_nil_or_empty?"
+            init_lines << "any_nil_or_empty? unless can_be_empty"
           end
           init_lines.join("\n")
 
         end
         # for min_occur = 0
+        puts "skip_params before method: #{skip_params}"
         unless skip_params.empty?
           c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
             "instance_variables.any? do |var|
@@ -381,17 +394,17 @@ module WSDL
         end
 
         unless skip_params.empty?
-          xml_lines << "instance.any_nil_or_empty?"
+          xml_lines << "instance.any_nil_or_empty? unless can_be_empty"
         end
 
-        c.def_method('self.from_xml', 'xml, path=nil') do
+        c.def_method('self.from_xml', 'xml, path=nil, can_be_empty = false') do
           "if path
-        doc = xml
-        else
+      doc = xml
+    else
       doc = Nokogiri::XML(xml)
-      end
-      instance = new
-      path = self.path unless path\n" + xml_lines.join("\n") + "\ninstance"
+      path = self.path
+    end
+    instance = new\n" + xml_lines.join("\n") + "\ninstance"
         end
         c.def_method('to_s') do
           "attributes = self.instance_variables.map do |var|
@@ -454,8 +467,11 @@ module WSDL
               attrname = safemethodname(name)
               varname = safevarname(name)
               c.def_attr(attrname, true, varname)
+              can_be_empty = ", false"
               if element.minoccurs == 0
+                # puts "element #{element} can be empty var name: #{varname}"
                 skip_params << ":#{varname}"
+                can_be_empty = ", true"
               end
               inner2 = check_element(element)
               # classname = mapped_class_basename(qname, mpath)
@@ -465,7 +481,7 @@ module WSDL
                 init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
                 xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc)"
                 if element.map_as_array?
-                  init_params << "#{varname} = nil"#todo really handle array
+                  init_params << "#{varname} = nil" # todo really handle array
                 else
                   init_params << "#{varname} = nil"
                 end
@@ -481,7 +497,7 @@ module WSDL
                 init_lines << "@#{varname} = #{typename}.new"
                 init_lines << "@#{varname}.value = #{varname} if #{varname}"
 
-                xml_lines << "instance.#{varname} = #{typename}.from_xml(doc, path + '/#{name}')"
+                xml_lines << "instance.#{varname} = #{typename}.from_xml(doc, path + '/#{name}'#{can_be_empty} || can_be_empty)"
 
                 if element.map_as_array?
                   init_params << "#{varname} = []"
@@ -507,14 +523,21 @@ module WSDL
             xml_lines.concat(child_xml_lines)
           when WSDL::XMLSchema::Choice
             puts "\nChoice here with size #{element.elements.size}" # puts all element of element.elements
+            puts "choice.minoccurs: #{element.minoccurs}"
             elementNames = []
             namecomplement = ""
             element.elements.each do |e|
-              puts e
               namecomplement += name_element(e).name
               elementNames << mapped_class_basename(name_element(e), @modulepath)
             end
+            # puts "minoccurs : #{element.minoccurs}"
             attrname = 'choice' + namecomplement
+            can_be_empty = ", false"
+            if element.minoccurs == 0
+              skip_params << ":#{attrname}"
+              can_be_empty = ", true"
+            end
+
             c.def_attr(attrname, true)
             cChoice = ClassDef.new('Choice' + namecomplement, 'Choice')
             cChoice.comment = "SpecificChoice for #{namecomplement}"
@@ -527,14 +550,14 @@ module WSDL
             puts "child_xml_lines: #{child_xml_lines}"
             init_lines << "@#{attrname} = #{cChoice.name}.new"
             init_params << "#{attrname} = nil"
-            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc, path)"
+            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc, path#{can_be_empty} || can_be_empty)"
             puts "added xml line to #{xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
 
             # puts "cChoice 1: #{cChoice.dump}"
             # puts "hey #{elementNames}"
-            cChoice.def_method('initialize', "") do
+            cChoice.def_method('initialize', "can_be_empty = false") do
               lines = "super(#{init_line_choice(elementNames)})"
               lines
             end
