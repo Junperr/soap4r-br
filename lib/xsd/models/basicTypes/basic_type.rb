@@ -28,7 +28,6 @@ class BasicType
   def to_s
     @value_str
   end
-
   private
 
   def validate(value)
@@ -110,7 +109,7 @@ class BasicType
   end
 
   def check_base64_binary(value)
-    raise ArgumentError, "Invalid base64Binary" unless value.is_a?(String) && value.match?(/\A[A-Za-z0-9+\/=]+\z/)
+    raise ArgumentError, "Invalid Base64Binary format" unless value.is_a?(String) && value =~ /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$/
     value
   end
 

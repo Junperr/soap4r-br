@@ -5,7 +5,7 @@ class ParsedDate < BasicType
     super('Date')
   end
 
-  def self.from_xml(doc, path)
+  def self.from_xml(doc, path, can_be_empty)
     element = doc.at_xpath(path)
     return nil unless element
     instance = new

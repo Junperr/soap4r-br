@@ -1,3 +1,6 @@
+# RestrictedBasicType class is a class that take a type
+# a soaptype and a restriction map as arguments
+# it make sure the value respect the types and the restrictions
 
 class RestrictedBasicType < BasicType
   def initialize(type, soap_type = '', restrictions = {})
@@ -18,7 +21,11 @@ class RestrictedBasicType < BasicType
     instance
   end
 
-  private
+  # def parse_restrictions(restrictions)
+  #   case @type
+  #
+  #   end
+  # end
 
   def validate(value)
     new_value = super(value)
@@ -79,27 +86,31 @@ class RestrictedBasicType < BasicType
 
   def check_enumeration(value) \
     if @restrictions[:enumeration] && !@restrictions[:enumeration].include?(value)
-      raise ArgumentError, "Value '#{value}' is not in the enumeration: #{@enumeration.join(', ')}"
+      raise ArgumentError, "Value '#{value}' is not in the enumeration: #{@restrictions[:enumeration].join(', ')}"
     end
   end
 
   def check_length(value)
-    if @restrictions[:min_length] && value.length < @restrictions[:min_length]
-      raise ArgumentError, "Value length #{value.length} is less than minimum length #{@min_length}"
+    if @restrictions[:minLength] && value.length < @restrictions[:minLength]
+      raise ArgumentError, "Value length #{value.length} is less than minimum length #{@restrictions[:minLength]}"
     end
-    if @restrictions[:max_length] && value.length > @restrictions[:max_length]
-      raise ArgumentError, "Value length #{value.length} is greater than maximum length #{@max_length}"
+    if @restrictions[:maxLength] && value.length > @restrictions[:maxLength]
+      raise ArgumentError, "Value length #{value.length} is greater than maximum length #{@restrictions[:maxLength]}"
     end
     if @restrictions[:length] && value.length != @restrictions[:length]
-      raise ArgumentError, "Value length #{value.length} is not equal to length #{@length}"
+      raise ArgumentError, "Value length #{value.length} is not equal to length #{@restrictions[:length]}"
     end
   end
 
   def check_pattern(value)
-    if @restrictions[:pattern] && value !~ @restrictions[:pattern]
-      raise ArgumentError, "Value '#{value}' does not match pattern #{@restrictions[:pattern]}"
+  if @restrictions[:pattern]
+    patterns = [@restrictions[:pattern]].flatten # Ensure patterns is an array
+    pattern_matched = patterns.any? { |pattern| value =~ pattern }
+    unless pattern_matched
+      raise ArgumentError, "Value '#{value}' does not match any pattern: #{patterns.join(', ')}"
     end
   end
+end
 
   def check_inclusive(value)
     if @restrictions[:minInclusive] && value < @restrictions[:minInclusive]
@@ -120,13 +131,20 @@ class RestrictedBasicType < BasicType
   end
 
   def check_total_digits(value)
-    if @restrictions[:totalDigits] && value.to_s.length > @restrictions[:totalDigits]
-      raise ArgumentError, "Value #{value} has more than #{@restrictions[:totalDigits]} digits"
-    end
-    if @restrictions[:fractionDigits] && value.to_s.split('.')[1].length > @restrictions[:fractionDigits]
-      raise ArgumentError, "Value #{value} has more than #{@restrictions[:fractionDigits]} fraction digits"
+  value_str = big_decimal_to_s(value)
+  # puts "value_str: #{value_str} value: #{value}"
+
+  if @restrictions[:totalDigits] && value_str.gsub('.', '').length > @restrictions[:totalDigits]
+    raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:totalDigits]} digits"
+  end
+
+  if @restrictions[:fractionDigits] && value_str.include?('.')
+    fraction_digits = value_str.split('.').last.length
+    if fraction_digits > @restrictions[:fractionDigits]
+      raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:fractionDigits]} fraction digits"
     end
   end
+end
 
   def check_white_space(value)
     case @restrictions[:whiteSpace]
@@ -139,6 +157,18 @@ class RestrictedBasicType < BasicType
     else
       value
     end
+  end
+
+  def big_decimal_to_s(value)
+    if @type == 'BigDecimal'
+      value.to_s('F')
+    else
+      value.to_s
+    end
+  end
+
+  def restrictions
+    @restrictions
   end
 
 end

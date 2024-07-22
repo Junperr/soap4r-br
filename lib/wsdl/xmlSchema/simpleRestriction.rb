@@ -39,7 +39,7 @@ class SimpleRestriction < Info
     @length = nil
     @maxlength = nil
     @minlength = nil
-    @pattern = nil
+    @pattern = []
     @white_space = nil
     @max_inclusive = nil
     @max_exclusive = nil
@@ -73,7 +73,7 @@ class SimpleRestriction < Info
   end
 
   def pattern?
-    !@pattern.nil?
+    !@pattern.empty?
   end
 
   def length?

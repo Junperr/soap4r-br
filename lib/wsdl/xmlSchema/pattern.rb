@@ -20,14 +20,14 @@ class Pattern < Info
   end
 
   def parse_element(element)
-    nil
+    []
   end
 
   def parse_attr(attr, value)
     puts "Pattern#parse_attr: attr=#{attr}, value=#{value}"
     case attr
     when ValueAttrName
-      parent.pattern = /\A#{value.source}\z/n
+      parent.pattern << /\A#{value.source}\z/n
       value.source
     end
   end
