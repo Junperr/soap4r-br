@@ -500,7 +500,7 @@ module WSDL
                 xml_lines << "instance.#{varname} = #{typename}.from_xml(doc, path + '/#{name}'#{can_be_empty} || can_be_empty)"
 
                 if element.map_as_array?
-                  init_params << "#{varname} = []"
+                  init_params << "#{varname} = nil"
                 else
                   init_params << "#{varname} = nil"
                 end
