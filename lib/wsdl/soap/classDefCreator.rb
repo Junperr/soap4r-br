@@ -192,8 +192,13 @@ module WSDL
         c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
           "super(type, soap_type, restrictions)"
         end
-        c.def_method('self.from_xml', "doc, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
-          "element = doc.at_xpath(self.path)
+        c.def_method('self.from_xml', "doc, path = nil, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
+          "if path
+path = path + '/' + self.xsd_name
+else
+path = self.path
+end
+          element = doc.at_xpath(path)
     return nil unless element
     instance = new(type, soap_type, restrictions)
     instance.value = element.content
@@ -347,7 +352,7 @@ module WSDL
         c.comment << "\nabstract" if typedef.abstract
         # puts "\nc1: #{c.dump}\n"
         parentmodule = mapped_class_name(qname, mpath)
-
+        puts "parentmodule: #{parentmodule}"
         # define all elements and attributes inside itself
         init_lines, init_params, skip_params, xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
@@ -430,9 +435,9 @@ module WSDL
         xml_lines = []
         any = false
         elements.each do |element|
-          puts "\nelement: #{element} #{element.inspect}"
-          puts "element.minoccurs: #{element.minoccurs}"
-          puts "element.maxoccurs: #{element.maxoccurs}"
+          # puts "\nelement: #{element} #{element.inspect}"
+          # puts "element.minoccurs: #{element.minoccurs}"
+          # puts "element.maxoccurs: #{element.maxoccurs}"
           case element
           when XMLSchema::Any
             # only 1 <any/> is allowed for now.
@@ -479,7 +484,7 @@ module WSDL
               if inner2
                 elemClass = mapped_class_basename(element.name, @modulepath)
                 init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
-                xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc)"
+                xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc, path)"
                 if element.map_as_array?
                   init_params << "#{varname} = nil" # todo really handle array
                 else
@@ -543,7 +548,7 @@ module WSDL
             cChoice.comment = "SpecificChoice for #{namecomplement}"
             puts "cChoice : #{cChoice.dump}"
             child_init_lines, child_init_params, child_skip_params, child_xml_lines =
-              parse_elements(cChoice, element.elements, base_namespace, mpath, as_array)
+              parse_elements(cChoice, element.elements, base_namespace, mpath + "::#{'Choice' + namecomplement}", as_array)
             puts "child_init_lines: #{child_init_lines}"
             puts "child_init_params: #{child_init_params}"
             puts "child_skip_params: #{child_skip_params}"
@@ -578,6 +583,9 @@ module WSDL
             skip_params.concat(child_skip_params)
             xml_lines.concat(child_xml_lines)
           else
+            puts "element #{element} is not element"
+            puts "c is #{c} base_namespace is #{base_namespace} mpath is #{mpath} as_array is #{as_array}"
+            puts "inspect: #{element.content}"
             raise RuntimeError.new("unknown type: #{element}")
           end
         end
