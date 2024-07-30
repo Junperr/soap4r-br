@@ -47,7 +47,7 @@ module WSDL
         puts "elements: #{@elements.inspect}"
         puts "attributes: #{@attributes.inspect}"
 
-        result = "require_relative '../../models/all_class'\n" # any imports you want for your class
+        result = "require_relative '../../models/V2/all_class'\n" # any imports you want for your class
         # cannot use @modulepath because of multiple classes
         if @modulepath
           result << "\n"
@@ -192,17 +192,8 @@ module WSDL
         c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
           "super(type, soap_type, restrictions)"
         end
-        c.def_method('self.from_xml', "doc, path = nil, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
-          "if path
-path = path + '/' + self.xsd_name
-else
-path = self.path
-end
-          element = doc.at_xpath(path)
-    return nil unless element
-    instance = new(type, soap_type, restrictions)
-    instance.value = element.content
-    instance"
+        c.def_method('self.from_xml', "parser, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
+          "super( parser, type,  soap_type,  restrictions, can_be_empty)"
         end
         c
       end
@@ -403,12 +394,11 @@ end
         end
 
         c.def_method('self.from_xml', 'xml, path=nil, can_be_empty = false') do
-          "if path
-      doc = xml
-    else
-      doc = Nokogiri::XML(xml)
-      path = self.path
-    end
+          "parser = XMLParser.new(xml)
+    if parser.current.name != self.xsd_name and !can_be_empty
+      raise \"Current element \#{parser.current.name} should be a \#{self.xsd_name}\"
+        end
+        parser.next
     instance = new\n" + xml_lines.join("\n") + "\ninstance"
         end
         c.def_method('to_s') do
@@ -484,7 +474,7 @@ end
               if inner2
                 elemClass = mapped_class_basename(element.name, @modulepath)
                 init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
-                xml_lines << "instance.#{varname} = #{elemClass}.from_xml(doc, path)"
+                xml_lines << "instance.#{varname} = #{elemClass}.from_xml(parser)"
                 if element.map_as_array?
                   init_params << "#{varname} = nil" # todo really handle array
                 else
@@ -502,7 +492,7 @@ end
                 init_lines << "@#{varname} = #{typename}.new"
                 init_lines << "@#{varname}.value = #{varname} if #{varname}"
 
-                xml_lines << "instance.#{varname} = #{typename}.from_xml(doc, path + '/#{name}'#{can_be_empty} || can_be_empty)"
+                xml_lines << "instance.#{varname} = #{typename}.from_xml(parser,'#{name}'#{can_be_empty} || can_be_empty)"
 
                 if element.map_as_array?
                   init_params << "#{varname} = nil"
@@ -544,7 +534,7 @@ end
             end
 
             c.def_attr(attrname, true)
-            cChoice = ClassDef.new('Choice' + namecomplement, 'Choice')
+            cChoice = ClassDef.new('Choice' + namecomplement, 'Choice2')
             cChoice.comment = "SpecificChoice for #{namecomplement}"
             puts "cChoice : #{cChoice.dump}"
             child_init_lines, child_init_params, child_skip_params, child_xml_lines =
@@ -555,7 +545,7 @@ end
             puts "child_xml_lines: #{child_xml_lines}"
             init_lines << "@#{attrname} = #{cChoice.name}.new"
             init_params << "#{attrname} = nil"
-            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(doc, path#{can_be_empty} || can_be_empty)"
+            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser#{can_be_empty} || can_be_empty)"
             puts "added xml line to #{xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
