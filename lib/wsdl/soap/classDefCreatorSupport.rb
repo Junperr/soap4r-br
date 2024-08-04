@@ -25,7 +25,7 @@ module WSDL
 
       def mapped_class_basename(qname, modulepath)
         classname = @name_creator.assign_name(qname, modulepath)
-        # puts "mapped_class_basename #{qname} #{modulepath} #{classname}"
+        puts "mapped_class_basename #{qname} #{modulepath} #{classname} #{classname.sub(/\A.*:/, '')}"
         classname.sub(/\A.*:/, '')
       end
 
@@ -240,13 +240,17 @@ __EOD__
         end
       end
 
-      def name_element(element)
+      def name_element(element, no_prefix = false)
+        elemClassNamePrefix = ""
+        if element.as_array? and !no_prefix
+          elemClassNamePrefix = "ElemC"
+        end
         if element.respond_to?(:name)
-          return element.name if element.name
+            return XSD::QName.new("", elemClassNamePrefix + element.name.name)
         end
 
         if element.respond_to?(:ref)
-          return element.ref if element.ref
+          return XSD::QName.new("", elemClassNamePrefix + element.ref.name)
         end
 
         # puts "look here #{element}"
@@ -260,11 +264,11 @@ __EOD__
           # puts "namecomplement for #{element} #{namecomplement}"
           case element
           when WSDL::XMLSchema::Sequence
-            return XSD::QName.new("", "Sequence#{namecomplement}")
+            return XSD::QName.new("", elemClassNamePrefix + "Sequence#{namecomplement}")
           when WSDL::XMLSchema::Choice
-            return XSD::QName.new("", "Choice#{namecomplement}")
+            return XSD::QName.new("", elemClassNamePrefix + "Choice#{namecomplement}")
           when WSDL::XMLSchema::All
-            return XSD::QName.new("", "All#{namecomplement}")
+            return XSD::QName.new("", elemClassNamePrefix + "All#{namecomplement}")
           else
             raise RuntimeError.new("cannot define name of element with elements #{element}")
           end

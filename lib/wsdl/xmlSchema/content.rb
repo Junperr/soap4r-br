@@ -42,6 +42,10 @@ class Content < Info
     false
   end
 
+  def as_array?
+    maxoccurs.nil? or maxoccurs != 1
+  end
+
   def map_as_array?
     maxoccurs.nil? or maxoccurs != 1
   end

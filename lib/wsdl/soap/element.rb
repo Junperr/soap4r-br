@@ -20,6 +20,10 @@ class Element < Info
     maxoccurs.nil? or maxoccurs != 1 or (parent and parent.map_as_array?)
   end
 
+  def as_array?
+    maxoccurs.nil? or maxoccurs != 1
+  end
+
   def anonymous_type?
     !@ref and @name and @local_complextype
   end

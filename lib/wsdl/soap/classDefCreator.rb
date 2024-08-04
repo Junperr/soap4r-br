@@ -163,6 +163,8 @@ module WSDL
         end
       end
 
+
+
       def newtype?
         # code here
       end
@@ -182,6 +184,7 @@ module WSDL
           return nil
         end
         classname = mapped_class_basename(qname, mpath)
+        puts "Creating simple type: #{qname} with classname #{classname}"
         c = ClassDef.new(classname, 'RestrictedBasicType')
         c.comment = "#{qname}"
         c.def_method('self.xsd_name') do
@@ -295,6 +298,27 @@ module WSDL
         end
         c.def_method('initialize', '*arg') do
           "super\n" + init_lines.join("\n")
+        end
+        c
+      end
+
+      def create_elem_collec(mpath, qname, element)
+        puts "Creating element collection: #{qname} with element #{element}"
+        case element
+        when XMLSchema::Element
+          elem_attrib = get_element_attrib(mpath, element, true)
+          c = ClassDef.new('ElemC'+elem_attrib[:name], 'ElemCollection')
+          c.comment = "element collection for #{qname}"
+          puts "Creating element collection: #{qname}"
+          c.def_method('initialize', "max_occ = #{element.maxoccurs || 'nil'}") do
+            "super(max_occ, #{init_line_elemC(elem_attrib)})"
+          end
+        when WSDL::XMLSchema::Sequence
+          puts "Creating sequence collection: #{qname}"
+        when WSDL::XMLSchema::Choice
+          puts "Creating choice collection: #{qname}"
+        else
+          raise RuntimeError.new("unknown kind of element: #{element}")
         end
         c
       end
@@ -440,9 +464,23 @@ module WSDL
             end
             init_lines << "@__xmlele_any = nil"
           when XMLSchema::Element
+            puts "max occurences: #{element.maxoccurs} as array: #{element.map_as_array?}"
+
+            if element.as_array?
+              cElemCollec = create_elem_collec(mpath, element.name, element)
+              # parse_elements(cElemCollec, [element], base_namespace, mpath, true)
+              puts "cElemCollec: #{cElemCollec.dump}"
+            end
+
             puts "element #{element} is element "
             next if element.ref == SchemaName
-            name = name_element(element).name
+            if cElemCollec
+              newC = cElemCollec
+              name = name_element(element,true).name
+            else
+              newC = c
+              name = name_element(element).name
+            end
             typebase = @modulepath
 
             if element.anonymous_type?
@@ -455,13 +493,13 @@ module WSDL
               unless as_array
                 inner.comment = "inner class for member: #{name}\n" + inner.comment
               end
-              c.innermodule << inner
+              newC.innermodule << inner
               typebase = mpath
             end
             unless as_array
               attrname = safemethodname(name)
               varname = safevarname(name)
-              c.def_attr(attrname, true, varname)
+              newC.def_attr(attrname, true, varname)
               can_be_empty = ", false"
               if element.minoccurs == 0
                 # puts "element #{element} can be empty var name: #{varname}"
@@ -481,7 +519,7 @@ module WSDL
                   init_params << "#{varname} = nil"
                 end
                 inner2.comment = "inner class for member: #{name}\n" + inner2.comment
-                c.innermodule << inner2
+                newC.innermodule << inner2
                 typebase = mpath
               else
                 typename = create_type_name(typebase, element)
@@ -501,31 +539,57 @@ module WSDL
                 end
               end
 
-              c.comment << "\n  #{attrname} - #{create_type_name(typebase, element) || '(any)'}"
+              newC.comment << "\n  #{attrname} - #{create_type_name(typebase, element) || '(any)'}"
+
+              if cElemCollec
+                c.innermodule << newC
+              end
               # puts "type name is #{create_type_name(typebase, element)}"
             end
           when WSDL::XMLSchema::Sequence
             puts "\nSequence here with size #{element.elements.size}"
+
+            elementNames, namecomplement = create_name_complement(mpath, element)
+
+            attrname = 'sequence' + namecomplement
+            can_be_empty = ", false"
+            if element.minoccurs == 0
+              skip_params << ":#{attrname}"
+              can_be_empty = ", true"
+            end
+
+            c.def_attr(attrname, true)
+            cSeq = ClassDef.new('Sequence' + namecomplement, 'Sequence')
+            cSeq.comment = "SpecificSequence for #{namecomplement}"
+            puts "cSeq : #{cSeq.dump}"
             child_init_lines, child_init_params, child_skip_params, child_xml_lines =
-              parse_elements(c, element.elements, base_namespace, mpath, as_array)
-            puts "child_init_lines: #{child_init_lines}"
-            puts "child_init_params: #{child_init_params}"
-            puts "child_skip_params: #{child_skip_params}"
-            puts "child_xml_lines: #{child_xml_lines}"
-            init_lines.concat(child_init_lines)
-            init_params.concat(child_init_params)
-            skip_params.concat(child_skip_params)
-            xml_lines.concat(child_xml_lines)
+              parse_elements(cSeq, element.elements, base_namespace, mpath + "::#{'Sequence' + namecomplement}", as_array)
+            # puts "child_init_lines: #{child_init_lines}"
+            # puts "child_init_params: #{child_init_params}"
+            # puts "child_skip_params: #{child_skip_params}"
+            # puts "child_xml_lines: #{child_xml_lines}"
+            init_lines << "@#{attrname} = #{cSeq.name}.new"
+            init_params << "#{attrname} = nil"
+            xml_lines << "instance.#{attrname} = #{cSeq.name}.from_xml(parser#{can_be_empty} || can_be_empty)"
+            # puts "added xml line to #{xml_lines}"
+            # init_lines.concat(child_init_lines)
+            # init_params.concat(child_init_params)
+
+            # puts "cSeq 1: #{cSeq.dump}"
+            # puts "hey #{elementNames}"
+            cSeq.def_method('initialize', "can_be_empty = false") do
+              lines = "super(#{init_line_sequence(elementNames)})"
+              lines
+            end
+
+            # puts "cSeq 2: #{cSeq.dump}"
+
+            c.innermodule << cSeq
           when WSDL::XMLSchema::Choice
             puts "\nChoice here with size #{element.elements.size}" # puts all element of element.elements
-            puts "choice.minoccurs: #{element.minoccurs}"
-            elementNames = []
-            namecomplement = ""
-            element.elements.each do |e|
-              namecomplement += name_element(e).name
-              elementNames << mapped_class_basename(name_element(e), @modulepath)
-            end
-            # puts "minoccurs : #{element.minoccurs}"
+            # puts "choice.minoccurs: #{element.minoccurs}"
+            elementNames, namecomplement = create_name_complement(mpath, element)
+
             attrname = 'choice' + namecomplement
             can_be_empty = ", false"
             if element.minoccurs == 0
@@ -539,14 +603,14 @@ module WSDL
             puts "cChoice : #{cChoice.dump}"
             child_init_lines, child_init_params, child_skip_params, child_xml_lines =
               parse_elements(cChoice, element.elements, base_namespace, mpath + "::#{'Choice' + namecomplement}", as_array)
-            puts "child_init_lines: #{child_init_lines}"
-            puts "child_init_params: #{child_init_params}"
-            puts "child_skip_params: #{child_skip_params}"
-            puts "child_xml_lines: #{child_xml_lines}"
+            # puts "child_init_lines: #{child_init_lines}"
+            # puts "child_init_params: #{child_init_params}"
+            # puts "child_skip_params: #{child_skip_params}"
+            # puts "child_xml_lines: #{child_xml_lines}"
             init_lines << "@#{attrname} = #{cChoice.name}.new"
             init_params << "#{attrname} = nil"
             xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser#{can_be_empty} || can_be_empty)"
-            puts "added xml line to #{xml_lines}"
+            # puts "added xml line to #{xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
 
@@ -590,6 +654,38 @@ module WSDL
         elsif element.local_complextype
         end
       end
+
+      def create_name_complement(mpath, element)
+        elementNames = []
+        namecomplement = ""
+        element.elements.each do |e|
+          namecomplement += name_element(e).name
+          classname = mapped_class_basename(name_element(e), "")
+
+          if e.respond_to?(:name) and !(e.respond_to?(:local_simpletype) && e.local_simpletype)
+            # there are one of the basic types
+            typename = create_type_name(mpath, e)
+            elementNames << { name: classname, class: typename, xsd_path: name_element(e).name }
+          else
+            elementNames << { name: classname, class: classname, xsd_path: name_element(e).name }
+          end
+        end
+        return elementNames, namecomplement
+      end
+
+      def get_element_attrib(mpath, element, no_prefix = false)
+        classname = mapped_class_basename(name_element(element, no_prefix), "")
+
+        if element.respond_to?(:name) and !(element.respond_to?(:local_simpletype) && element.local_simpletype)
+          typename = create_type_name(mpath, element)
+           { name: classname, class: typename, xsd_path: name_element(element, no_prefix).name }
+        else
+          { name: classname, class: classname, xsd_path: name_element(element, no_prefix).name }
+        end
+
+        # attrib
+      end
+
 
       def define_attribute(c, attributes)
         const = {}
@@ -680,10 +776,19 @@ module WSDL
       end
 
       def init_line_choice(arr)
-        s = arr.map { |elem| "#{elem}:#{elem}" }.join(", ")
+        s = arr.map { |elem| "#{elem[:name]}:{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
         s
       end
 
+      def init_line_sequence(arr)
+        s = arr.map { |elem| "{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
+        return "[#{s}]"
+      end
+
+      def init_line_elemC(attrib)
+        s = "{name:'#{attrib[:name]}',class:#{attrib[:class]},xsd_path:'#{attrib[:xsd_path]}'}"
+        return s
+      end
     end
   end
 end
