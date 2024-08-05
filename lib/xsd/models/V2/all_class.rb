@@ -1,4 +1,7 @@
 require_relative 'Choice'
+require_relative 'Sequence'
+require_relative 'ElemCollec'
+require_relative 'XmlParser'
 require_relative 'basicTypes/parsed_BigDecimal'
 require_relative 'basicTypes/parsed_DateTime'
 require_relative 'basicTypes/parsed_Integer'
@@ -9,8 +12,9 @@ require_relative 'basicTypes/parsed_Time'
 require_relative 'basicTypes/parsed_Boolean'
 require_relative 'basicTypes/parsed_Base64Binary'
 require_relative 'basicTypes/restrictedBasicType'
-# path_to_class = '../class/test/'
-# # require_relative "#{path_to_class}Entete"
+path_to_class = '../../class/test2/'
+require_relative "#{path_to_class}EnteteBis"
+require_relative "#{path_to_class}Entete"
 # require_relative "#{path_to_class}coor"
 # require_relative "#{path_to_class}personne"
 # require_relative "#{path_to_class}FichierJoint"

@@ -4,16 +4,12 @@ class Choice2
   def initialize(attributes = {})
     @attributes = attributes
     @choice = nil
-    # @choice_value = nil
-
     validate_attributes
   end
 
   def attr_choice(type, value)
     if @attributes.key?(type)
-      if @attributes[type].is_a?(Class) && @attributes[type].respond_to?(:new)
-        # puts "choosing #{type}"
-        # puts "value: #{value} #{value.class}"
+      if @attributes[type][:class].is_a?(Class) && @attributes[type][:class].respond_to?(:new)
         @choice = value
       else
         raise ArgumentError, "Invalid Choice type: #{type}"
@@ -24,33 +20,66 @@ class Choice2
     end
   end
 
-  def self.from_xml(parser, canBeEmpty = false)
-    selected = false
+  def self.xsd_name
+    arr = []
     instance = new
-    instance.attributes.each do |name, attrib|
-      # puts "choice elem path #{path + "/#{attrib.xsd_name}"}"
-      choice_element = parser.current
+    attributes = instance.attributes
+    attributes.keys.each { |key|
+      if attributes[key][:class].ancestors.include?(Choice2)
+        attributes[key][:class].xsd_name.each { |elem|
+          arr << elem
+        }
+      else
 
-      if choice_element && choice_element.name == attrib.xsd_name
-        # from_xml_method = attrib.method(:from_xml)
-        # parameters = from_xml_method.parameters
-        # if parameters.length >= 2 && parameters[1][1] == :path
-        #   if attrib.ancestors.include?(RestrictedBasicType)
-        #     instance.attr_choice(name, attrib.from_xml(choice_element, path))
-        #   else
-        #     instance.attr_choice(name, attrib.from_xml(choice_element, path + "/#{attrib.xsd_name}"))
-        #   end
-        # else
-        selected = true
-          instance.attr_choice(name, attrib.from_xml(parser))
-        # end
-        break
+        if attributes[key][:class].ancestors[1] == BasicType
+          arr << attributes[key][:xsd_path]
+        else
+          arr << attributes[key][:class].xsd_name
+        end
       end
+    }
+    arr
+  end
+
+  def self.from_xml(parser, canBeEmpty = false)
+    instance = new
+    if self.xsd_name.include?(parser.current.name)
+      instance.attributes.each do |name, attrib|
+        # puts "choice elem path #{path + "/#{attrib[:class].xsd_name}"}"
+
+        if attrib[:class].ancestors.include?(Choice2)
+          if attrib[:class].xsd_name.include?(parser.current.name)
+            instance.attr_choice(name, attrib[:class].from_xml(parser))
+            break
+          end
+        else
+          if attrib[:class].ancestors[1] == BasicType
+            if attrib[:xsd_path] == parser.current.name
+              instance.attr_choice(name, attrib[:class].from_xml(parser))
+              break
+            end
+          else
+            if attrib[:class].xsd_name == parser.current.name
+              instance.attr_choice(name, attrib[:class].from_xml(parser))
+              break
+            end
+          end
+
+        end
+      end
+      instance
+    else
+      raise "Current element #{parser.current.name} should be #{instance.xsd_name}"
     end
-    unless selected
-      raise "Current element #{parser.current.name} should be #{instance.attributes.map { |name, attrib| attrib.xsd_name }.join(' or ')}"
+
+  end
+
+  def self.compare_xsd_name(name, elem)
+    if elem[:class].ancestors.include?(Choice2)
+      self.xsd_path.include?(name)
+    else
+      return false
     end
-    instance
   end
 
   def validate_attributes
@@ -85,10 +114,6 @@ class Choice2
   def to_s
     class_name = self.class.shorter_name # Get the class name
     # Create a string representation of attributes and their values
-    # attributes_str = @attributes.map do |name, value|
-    #   value_str = value ? value.to_s : 'nil'  # Convert the value to a string or use 'nil'
-    #   "#{name}: #{value_str}"  # Format the string for the attribute
-    # end.join(', ')  # Join all attribute strings with commas
 
     attributes_str = "#{choice.class.name.split('::').last} : #{choice.value.to_s}"
 

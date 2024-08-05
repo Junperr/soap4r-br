@@ -100,7 +100,7 @@ __EOD__
         @defined_const[value] = tag
       end
 
-      def create_type_name(modulepath, element)
+      def create_type_name(modulepath, element, no_prefix = false)
         puts "element= #{element.name} type #{element.type} ref #{element.ref} anom ?#{element.anonymous_type?} simplesypes #{@simpletypes}"
         if element.type == XSD::AnyTypeName
           # nil means anyType.
@@ -112,7 +112,7 @@ __EOD__
           else
             nil
           end
-        elsif klass = element_basetype(element)
+        elsif klass = element_basetype(element, no_prefix)
           # if klass.is_a?(Array)
           #   klass
           # else
@@ -192,7 +192,7 @@ __EOD__
         }.join("\n")
       end
 
-      def element_basetype(ele)
+      def element_basetype(ele, no_prefix = false)
         puts "option 2"
         puts "element_basetype #{ele.name} type #{ele.type} simpletype #{ele.local_simpletype}"
         if (klass = basetype_class(ele.type))
@@ -210,7 +210,7 @@ __EOD__
           # here we have acces to the simple type we should work here
           c = create_simpletypedef(@modulepath, ele.name, ele.local_simpletype)
           if c
-            name_element(ele)
+            name_element(ele, no_prefix)
           else
             basetype_class(ele.local_simpletype.base)
           end

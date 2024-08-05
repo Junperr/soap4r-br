@@ -16,7 +16,7 @@ class BasicType
     @value_str = new_value
   end
 
-  def self.from_xml(parser, xsd_name, can_be_empty)
+  def self.from_xml(parser, xsd_name, can_be_empty = false)
     if parser.current.name != xsd_name
       if can_be_empty
         nil
