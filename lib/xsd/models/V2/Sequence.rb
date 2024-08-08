@@ -1,10 +1,10 @@
 class Sequence
-  attr_accessor :attributes, :elements
+  attr_accessor :attributes, :elements, :allowed_nil_attributes
 
   def initialize(attributes = [])
     @attributes = attributes
     @elements = {}
-    validate_attributes
+    @allowed_nil_attributes = []
   end
 
   def attr_sequence(type, value)
@@ -36,45 +36,54 @@ class Sequence
   def self.from_xml(parser, can_be_empty = false)
     instance = new
     instance.attributes.each do |attrib|
-      puts "attrib #{attrib[:xsd_path]} current_name #{parser.current.name}"
-      if attrib[:class].ancestors.include?(Choice2)
+      # puts "attrib #{attrib[:xsd_path]} current_name #{parser.current.name} allowed_nil_attributes #{instance.allowed_nil_attributes} #{instance.allowed_nil_attributes.include?(attrib[:xsd_path])}"
+      if attrib[:class].ancestors.include?(Choice2) # is choice
         puts "is choice"
         if attrib[:class].xsd_name.include?(parser.current.name)
           instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser))
+        else
+          if !attrib[:class].from_xml(parser) == "skipped" or !instance.allowed_nil_attributes.include?(attrib[:xsd_path]) # can't be skipped
+            raise "Current element #{parser.current.name} should be #{attrib[:class].xsd_name}"
+          end
         end
       else
-        if attrib[:class].ancestors[1] == BasicType
+        if attrib[:class].ancestors[1] == BasicType # is basic type
           puts "is basic type"
           if attrib[:xsd_path] == parser.current.name
-            instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser, attrib[:xsd_path], can_be_empty))
+            if can_be_empty
+              instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser, attrib[:xsd_path], can_be_empty))
+            else
+              instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser, attrib[:xsd_path]))
+            end
           else
-            raise "Current element #{parser.current.name} should be #{attrib[:xsd_path]}"
+            if !attrib[:class].from_xml(parser) == "skipped" or !instance.allowed_nil_attributes.include?(attrib[:xsd_path])
+              raise "Current element #{parser.current.name} should be #{attrib[:class].xsd_name}"
+            end
           end
-        else
+        else # is not basic type (ie a simple type with restrictions)
           puts "is not basic type #{attrib[:class].xsd_name}"
-          if attrib[:class].xsd_name.is_a?(Array)
+          if attrib[:class].xsd_name.is_a?(Array) # if it's a choice
             if attrib[:class].xsd_name.include?(parser.current.name)
               instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser))
             else
-
+              if !attrib[:class].from_xml(parser) == "skipped" or !instance.allowed_nil_attributes.include?(attrib[:xsd_path])
                 raise "Current element #{parser.current.name} should be #{attrib[:class].xsd_name}"
               end
+            end
           else
-            if attrib[:class].xsd_name == parser.current.name
+            if parser.current and attrib[:class].xsd_name == parser.current.name
               instance.attr_sequence(attrib[:name], attrib[:class].from_xml(parser))
             else
-              raise "Current element #{parser.current.name} should be #{attrib[:class].xsd_name}"
+              if !instance.allowed_nil_attributes.include?(attrib[:xsd_path]) and !attrib[:class].from_xml(parser) == "skipped"
+                raise "Current element #{parser.current.name} should be #{attrib[:class].xsd_name}"
+              end
             end
           end
 
         end
       end
-      end
-      instance
-      # else
-      #   raise "Current element #{parser.current.name} should be #{instance.xsd_name}"
-      # end
-
+    end
+    instance
   end
 
   def validate_attributes
@@ -120,12 +129,3 @@ class Sequence
     end
   end
 end
-
-# Example usage
-# attributes = [
-#   { type: :type1, value: SomeClass.new },
-#   { type: :type2, value: AnotherClass.new }
-# ]
-#
-# sequence = Sequence.new(attributes)
-# puts sequence

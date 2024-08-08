@@ -69,6 +69,9 @@ class Choice2
       end
       instance
     else
+      if canBeEmpty
+        return "skipped"
+      end
       raise "Current element #{parser.current.name} should be #{instance.xsd_name}"
     end
 
@@ -115,7 +118,7 @@ class Choice2
     class_name = self.class.shorter_name # Get the class name
     # Create a string representation of attributes and their values
 
-    attributes_str = "#{choice.class.name.split('::').last} : #{choice.value.to_s}"
+    attributes_str = "#{choice.class.name.split('::').last} : #{choice.to_s}"
 
     # Return the class name and attribute
     "#{class_name} : {#{attributes_str}}"

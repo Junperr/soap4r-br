@@ -151,9 +151,10 @@ module WSDL
         end
       end
 
-      def create_simpletypedef(mpath, qname, simpletype, qualified = false)
+      def create_simpletypedef(mpath, qname, simpletype, qualified = false, can_be_empty = false)
+        puts "check2 empty for #{qname} #{can_be_empty}"
         if simpletype.restriction
-          create_simpletypedef_restriction(mpath, qname, simpletype, qualified)
+          create_simpletypedef_restriction(mpath, qname, simpletype, qualified, can_be_empty)
         elsif simpletype.list
           create_simpletypedef_list(mpath, qname, simpletype, qualified)
         elsif simpletype.union
@@ -167,7 +168,9 @@ module WSDL
         # code here
       end
 
-      def create_simpletypedef_restriction(mpath, qname, typedef, qualified)
+      def create_simpletypedef_restriction(mpath, qname, typedef, qualified, can_be_empty = false)
+        puts "check3 empty for #{qname} #{can_be_empty}"
+
         restriction = typedef.restriction
         puts "restriction: #{typedef.restriction} #{typedef.restriction.pattern}"
         puts "type.base: #{basetype_class(typedef.base)}"
@@ -190,10 +193,10 @@ module WSDL
         end
         restrictions = define_string_restriction(restriction)
 
-        c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
+        c.def_method('initialize', "type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = #{can_be_empty}") do
           "super(type, soap_type, restrictions)"
         end
-        c.def_method('self.from_xml', "parser, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = false") do
+        c.def_method('self.from_xml', "parser, type = \'#{newtype.to_s.slice(6..-1)}\', soap_type = \'#{soaptype}\', restrictions = #{restrictions}, can_be_empty = #{can_be_empty}") do
           "super( parser, type,  soap_type,  restrictions, can_be_empty)"
         end
         c
@@ -312,9 +315,21 @@ module WSDL
             "super(max_occ, #{init_line_elemC(elem_attrib)})"
           end
         when WSDL::XMLSchema::Sequence
+          elem_attrib = get_element_attrib(mpath, element, true)
+          c = ClassDef.new('ElemC' + elem_attrib[:name], 'ElemCollection')
+          c.comment = "element collection for #{qname}"
           puts "Creating sequence collection: #{qname}"
+          c.def_method('initialize', "max_occ = #{element.maxoccurs || 'nil'}") do
+            "super(max_occ, #{init_line_elemC(elem_attrib)})"
+          end
         when WSDL::XMLSchema::Choice
+          elem_attrib = get_element_attrib(mpath, element, true)
+          c = ClassDef.new('ElemC' + elem_attrib[:name], 'ElemCollection')
+          c.comment = "element collection for #{qname}"
           puts "Creating choice collection: #{qname}"
+          c.def_method('initialize', "max_occ = #{element.maxoccurs || 'nil'}") do
+            "super(max_occ, #{init_line_elemC(elem_attrib)})"
+          end
         else
           raise RuntimeError.new("unknown kind of element: #{element}")
         end
@@ -375,6 +390,9 @@ module WSDL
         puts "skip_params: #{skip_params}"
         puts "xml_lines: #{xml_lines}"
         # puts "\nc2: #{c.dump}\n"
+        if !skip_params.empty?
+          c.def_attr('allowed_nil_attributes', true, 'allowed_nil_attributes')
+        end
         unless typedef.attributes.empty?
           define_attribute(c, typedef.attributes)
           init_lines << "@__xmlattr = {}"
@@ -382,26 +400,26 @@ module WSDL
         # handle initialize method
         c.def_method('initialize', *init_params) do
           unless skip_params.empty?
-            init_lines << "any_nil_or_empty? unless can_be_empty"
+            init_lines << "allowed_nil_attributes = #{skip_params}"
           end
           init_lines.join("\n")
 
         end
         # for min_occur = 0
-        puts "skip_params before method: #{skip_params}"
-        unless skip_params.empty?
-          c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
-            "instance_variables.any? do |var|
-      # Skip the attribute if it's allowed to be nil or empty
-      next if allowed_nil_attributes.include?(var[1..].to_sym)
-
-      value = instance_variable_get(var)
-      if value.nil? || (value.respond_to?(:empty?) && value.empty?)
-        raise ArgumentError, \"Attribute '\#{var[1..]}' cannot be nil or empty\"
-      end
-    end"
-          end
-        end
+    #     puts "skip_params before method: #{skip_params}"
+    #     unless skip_params.empty?
+    #       c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
+    #         "instance_variables.any? do |var|
+    #   # Skip the attribute if it's allowed to be nil or empty
+    #   next if allowed_nil_attributes.include?(var[1..].to_sym)
+    #
+    #   value = instance_variable_get(var)
+    #   if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+    #     raise ArgumentError, \"Attribute '\#{var[1..]}' cannot be nil or empty\"
+    #   end
+    # end"
+    #       end
+    #     end
 
         c.def_method('self.path', '') do
           "\"//\#{self.xsd_name}\""
@@ -416,11 +434,19 @@ module WSDL
         end
 
         c.def_method('self.from_xml', 'xml, path=nil, can_be_empty = false') do
-          "parser = XMLParser.new(xml)
-    if parser.current.name != self.xsd_name and !can_be_empty
-      raise \"Current element \#{parser.current.name} should be a \#{self.xsd_name}\"
-        end
-        parser.next
+          "if xml.is_a?(XMLParser)
+            parser = xml
+          else
+            parser = XMLParser.new(xml)
+          end
+    if !can_be_empty
+      if parser.current.nil?
+        raise \"Reached end of xml\"
+      elsif parser.current.name != self.xsd_name
+        raise \"Current element \#{parser.current.name} should be a \#{self.xsd_name}\"
+      end
+    end
+    parser.next
     instance = new\n" + xml_lines.join("\n") + "\ninstance"
         end
         c.def_method('to_s') do
@@ -447,9 +473,7 @@ module WSDL
         xml_lines = []
         any = false
         elements.each do |element|
-          # puts "\nelement: #{element} #{element.inspect}"
-          # puts "element.minoccurs: #{element.minoccurs}"
-          # puts "element.maxoccurs: #{element.maxoccurs}"
+
           case element
           when XMLSchema::Any
             # only 1 <any/> is allowed for now.
@@ -462,14 +486,12 @@ module WSDL
             end
             init_lines << "@__xmlele_any = nil"
           when XMLSchema::Element
-            puts "max occurences: #{element.maxoccurs} as array: #{element.map_as_array?}"
 
             if element.as_array?
               cElemCollec = create_elem_collec(mpath, element.name, element)
               puts "cElemCollec: #{cElemCollec.dump}"
             end #  if there is more than 1 occurence we make a element collection
 
-            puts "element #{element} is element "
             next if element.ref == SchemaName
             if cElemCollec # to write inside the element collecction
               newC = cElemCollec
@@ -498,24 +520,23 @@ module WSDL
             attrname = safemethodname(name)
             varname = safevarname(name)
             newC.def_attr(attrname, true, varname)
-            can_be_empty = ", false"
+            can_be_empty = false
             if element.minoccurs == 0
               # puts "element #{element} can be empty var name: #{varname}"
-              skip_params << ":#{varname}"
-              can_be_empty = ", true"
+              skip_params << "#{name_element(element).name}"
+              can_be_empty = true
             end
-            inner2 = check_element(element)
-            # classname = mapped_class_basename(qname, mpath)
-            # init_lines and init_params are used to make initialisation method
-            if inner2
+            inner2 = check_element(element, can_be_empty)
+
+            if inner2 # element is a simple type that we redefine
               elemClass = mapped_class_basename(element.name, @modulepath)
               init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
-              xml_lines << "instance.#{varname} = #{elemClass}.from_xml(parser)"
-                init_params << "#{varname} = nil"
+              xml_lines << "instance.#{varname} = #{elemClass}.from_xml(parser, can_be_empty:#{can_be_empty})"
+              init_params << "#{varname} = nil"
               inner2.comment = "inner class for member: #{name}\n" + inner2.comment
               newC.innermodule << inner2
-              typebase = mpath
-            else # is of a basic type
+            else
+              # is of a basic type
               typename = create_type_name(typebase, element)
               # if typename == SOAP::SOAPNonNegativeInteger
               puts "typename is #{typename}"
@@ -524,273 +545,309 @@ module WSDL
               init_lines << "@#{varname} = #{typename}.new"
               init_lines << "@#{varname}.value = #{varname} if #{varname}"
 
-              xml_lines << "instance.#{varname} = #{typename}.from_xml(parser,'#{name}'#{can_be_empty} || can_be_empty)"
+              xml_lines << "instance.#{varname} = #{typename}.from_xml(parser,'#{name}',#{can_be_empty} || can_be_empty)"
 
               init_params << "#{varname} = nil"
             end
 
-            if cElemCollec
-              newC.comment << "\n  #{attrname} - #{create_type_name(typebase, element, true) || '(any)'}"
+            if cElemCollec or !element.as_array?
+              newC.comment << "\n  #{attrname} - #{create_type_name(mpath, element, true) || '(any)'}"
             else
-              newC.comment << "\n  #{attrname} - #{create_type_name(typebase, element) || '(any)'}"
-              end
+              newC.comment << "\n  #{attrname} - #{create_type_name(mpath, element) || '(any)'}"
+            end
 
-              if cElemCollec
+            if cElemCollec
               c.innermodule << newC
             end
             # puts "type name is #{create_type_name(typebase, element)}"
           when WSDL::XMLSchema::Sequence
-          puts "\nSequence here with size #{element.elements.size}"
+            puts "\nSequence here with size #{element.elements.size}"
 
-          # if element.as_array?
-          #   cElemCollec = create_elem_collec(mpath, element.name, element)
-          #   puts "cElemCollec: #{cElemCollec.dump}"
-          # end #  if there is more than 1 occurence we make a element collection
-          #
-          # if cElemCollec # to write inside the element collecction
-          #   newC = cElemCollec
-          #   name = name_element(element,true).name
-          # else
-          #   newC = c
-          #   name = name_element(element).name
-          # end
+            if element.as_array?
+              cElemCollec = create_elem_collec(mpath, XSD::QName.new, element)
+              puts "cElemCollec: #{cElemCollec.dump}"
+            end #  if there is more than 1 occurence we make a element collection
 
-          elementNames, namecomplement = create_name_complement(mpath, element)
+            if cElemCollec # to write inside the element collecction
+              newC = cElemCollec
+              c.def_attr(safemethodname(newC.name), true, safevarname(newC.name))
+              puts "newC name is #{newC.name}"
+              c.comment << "\n  #{safemethodname(newC.name)} - #{capitalize(safemethodname(newC.name))}"
+            else
+              newC = c
+            end
 
-          attrname = 'sequence' + namecomplement
-          can_be_empty = ", false"
-          if element.minoccurs == 0
-            skip_params << ":#{attrname}"
-            can_be_empty = ", true"
-          end
+            elementNames, namecomplement = create_name_complement(mpath, element)
 
-          c.def_attr(attrname, true)
-          c.comment << "\n  #{attrname} - #{'Sequence' + namecomplement || '(any)'}"
-          cSeq = ClassDef.new('Sequence' + namecomplement, 'Sequence')
-          cSeq.comment = "SpecificSequence for #{namecomplement}"
-          puts "cSeq : #{cSeq.dump}"
-          child_init_lines, child_init_params, child_skip_params, child_xml_lines =
-            parse_elements(cSeq, element.elements, base_namespace, mpath + "::#{'Sequence' + namecomplement}", as_array)
+            attrname = 'sequence' + namecomplement
+            can_be_empty = false
+            if element.minoccurs == 0
+              skip_params << "#{name_element(element).name}"
+              can_be_empty = true
+            end
 
-          init_lines << "@#{attrname} = #{cSeq.name}.new"
-          init_params << "#{attrname} = nil"
-          xml_lines << "instance.#{attrname} = #{cSeq.name}.from_xml(parser#{can_be_empty} || can_be_empty)"
+            newC.def_attr(attrname, true)
+            if cElemCollec or !element.as_array?
+              newC.comment << "\n  #{attrname} - #{'Sequence' + namecomplement || '(any)'}"
+            else
+              newC.comment << "\n  #{attrname} - #{'ElemCSequence' + namecomplement || '(any)'}"
+            end
 
-          cSeq.def_method('initialize', "can_be_empty = false") do
-            lines = "super(#{init_line_sequence(elementNames)})"
-            lines
-          end
+            cSeq = ClassDef.new('Sequence' + namecomplement, 'Sequence')
+            cSeq.comment = "SpecificSequence for #{namecomplement}"
+            puts "cSeq : #{cSeq.dump}"
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+              parse_elements(cSeq, element.elements, base_namespace, mpath + "::#{'Sequence' + namecomplement}", as_array)
+            if !child_skip_params.empty?
+              c.def_attr('allowed_nil_attributes', true, 'allowed_nil_attributes')
+            end
+            init_lines << "@#{attrname} = #{cSeq.name}.new"
+            init_params << "#{attrname} = nil"
+            xml_lines << "instance.#{attrname} = #{cSeq.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
 
-          c.innermodule << cSeq
+            cSeq.def_method('initialize', "can_be_empty = false") do
+              lines = ["super(#{init_line_sequence(elementNames)})"]
+              lines << "@allowed_nil_attributes = #{child_skip_params}" unless child_skip_params.empty?
+              lines.join("\n")
+            end
+
+            newC.innermodule << cSeq
+            if cElemCollec
+              c.innermodule << newC
+            end
           when WSDL::XMLSchema::Choice
-          puts "\nChoice here with size #{element.elements.size}" # puts all element of element.elements
-          # if element.as_array?
-          #   cElemCollec = create_elem_collec(mpath, element.name, element)
-          #   puts "cElemCollec: #{cElemCollec.dump}"
-          # end #  if there is more than 1 occurence we make a element collection
+            puts "\nChoice here with size #{element.elements.size}" # puts all element of element.elements
 
-          # puts "choice.minoccurs: #{element.minoccurs}"
-          elementNames, namecomplement = create_name_complement(mpath, element)
+            if element.as_array?
+              cElemCollec = create_elem_collec(mpath, XSD::QName.new, element)
+              puts "cElemCollec: #{cElemCollec.dump}"
+            end #  if there is more than 1 occurence we make a element collection
 
-          attrname = 'choice' + namecomplement
-          can_be_empty = ", false"
-          if element.minoccurs == 0
-            skip_params << ":#{attrname}"
-            can_be_empty = ", true"
-          end
+            if cElemCollec # to write inside the element collecction
+              newC = cElemCollec
+              c.def_attr(safemethodname(newC.name), true, safevarname(newC.name))
+              puts "newC name is #{newC.name}"
 
-          c.def_attr(attrname, true)
-          c.comment << "\n  #{attrname} - #{'Choice' + namecomplement || '(any)'}"
-          cChoice = ClassDef.new('Choice' + namecomplement, 'Choice2')
-          cChoice.comment = "SpecificChoice for #{namecomplement}"
-          puts "cChoice : #{cChoice.dump}"
-          child_init_lines, child_init_params, child_skip_params, child_xml_lines =
-            parse_elements(cChoice, element.elements, base_namespace, mpath + "::#{'Choice' + namecomplement}", as_array)
-          # puts "child_init_lines: #{child_init_lines}"
-          # puts "child_init_params: #{child_init_params}"
-          # puts "child_skip_params: #{child_skip_params}"
-          # puts "child_xml_lines: #{child_xml_lines}"
-          init_lines << "@#{attrname} = #{cChoice.name}.new"
-          init_params << "#{attrname} = nil"
-          xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser#{can_be_empty} || can_be_empty)"
-          # puts "added xml line to #{xml_lines}"
-          # init_lines.concat(child_init_lines)
-          # init_params.concat(child_init_params)
+              c.comment << "\n  #{safemethodname(newC.name)} - #{capitalize(safemethodname(newC.name))}"
+            else
+              newC = c
+            end
 
-          # puts "cChoice 1: #{cChoice.dump}"
-          # puts "hey #{elementNames}"
-          cChoice.def_method('initialize', "can_be_empty = false") do
-            lines = "super(#{init_line_choice(elementNames)})"
-            lines
-          end
+            elementNames, namecomplement = create_name_complement(mpath, element)
 
-          # puts "cChoice 2: #{cChoice.dump}"
+            attrname = 'choice' + namecomplement
+            can_be_empty = false
+            if element.minoccurs == 0
+              skip_params << "#{name_element(element).name}"
+              can_be_empty = true
+            end
 
-          c.innermodule << cChoice
+            newC.def_attr(attrname, true)
+            if cElemCollec or !element.as_array?
+              puts "adding comment to #{newC.name} with #{attrname} and #{'Choice' + namecomplement || '(any)'}"
+              newC.comment << "\n  #{attrname} - #{'Choice' + namecomplement || '(any)'}"
+            else
+              puts "adding comment to #{newC.name} with #{attrname} and #{'ElemCChoice' + namecomplement || '(any)'}"
+              newC.comment << "\n  #{attrname} - #{'ElemCChoice' + namecomplement || '(any)'}"
+            end
+            cChoice = ClassDef.new('Choice' + namecomplement, 'Choice2')
+            cChoice.comment = "SpecificChoice for #{namecomplement}"
+            puts "cChoice : #{cChoice.dump}"
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+              parse_elements(cChoice, element.elements, base_namespace, mpath + "::#{'Choice' + namecomplement}", as_array)
+            # puts "child_init_lines: #{child_init_lines}"
+            # puts "child_init_params: #{child_init_params}"
+            # puts "child_skip_params: #{child_skip_params}"
+            # puts "child_xml_lines: #{child_xml_lines}"
+            init_lines << "@#{attrname} = #{cChoice.name}.new"
+            init_params << "#{attrname} = nil"
+            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
+            # puts "added xml line to #{xml_lines}"
+            # init_lines.concat(child_init_lines)
+            # init_params.concat(child_init_params)
+
+            # puts "cChoice 1: #{cChoice.dump}"
+            # puts "hey #{elementNames}"
+            cChoice.def_method('initialize', "can_be_empty = false") do
+              lines = "super(#{init_line_choice(elementNames)})"
+              lines
+
+            end
+
+            # puts "cChoice 2: #{cChoice.dump}"
+
+            newC.innermodule << cChoice
+            if cElemCollec
+              c.innermodule << newC
+            end
 
           when WSDL::XMLSchema::Group
-          if element.content.nil?
-            warn("no group definition found: #{element}")
-            next
+            if element.content.nil?
+              warn("no group definition found: #{element}")
+              next
+            end
+            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+              parse_elements(c, element.content.elements, base_namespace, mpath, as_array)
+            init_lines.concat(child_init_lines)
+            init_params.concat(child_init_params)
+            skip_params.concat(child_skip_params)
+            xml_lines.concat(child_xml_lines)
+          else
+            puts "element #{element} is not element"
+            puts "c is #{c} base_namespace is #{base_namespace} mpath is #{mpath} as_array is #{as_array}"
+            puts "inspect: #{element.content}"
+            raise RuntimeError.new("unknown type: #{element}")
           end
-          child_init_lines, child_init_params, child_skip_params, child_xml_lines =
-            parse_elements(c, element.content.elements, base_namespace, mpath, as_array)
-          init_lines.concat(child_init_lines)
-          init_params.concat(child_init_params)
-          skip_params.concat(child_skip_params)
-          xml_lines.concat(child_xml_lines)
-        else
-          puts "element #{element} is not element"
-          puts "c is #{c} base_namespace is #{base_namespace} mpath is #{mpath} as_array is #{as_array}"
-          puts "inspect: #{element.content}"
-          raise RuntimeError.new("unknown type: #{element}")
+        end
+
+        [init_lines, init_params, skip_params, xml_lines]
+      end
+
+      def check_element(element, can_be_empty = false)
+        puts "check1 empty for #{element.name} #{can_be_empty} #{element.local_simpletype}"
+        if element.local_simpletype
+          puts "check1.1 empty for #{element.name} #{can_be_empty}"
+          c = create_simpletypedef(@modulepath, element.name, element.local_simpletype, false, can_be_empty)
+          puts "check1.2 empty change for #{element.name} #{can_be_empty}"
+          c
+        # elsif element.local_complextype
         end
       end
 
-      [init_lines, init_params, skip_params, xml_lines]
-    end
-
-    def check_element(element)
-      if element.local_simpletype
-        c = create_simpletypedef(@modulepath, element.name, element.local_simpletype)
-        c
-      elsif element.local_complextype
-      end
-    end
-
-    def create_name_complement(mpath, element)
-      elementNames = []
-      namecomplement = ""
-      element.elements.each do |e|
-        namecomplement += name_element(e).name
-        classname = mapped_class_basename(name_element(e), "")
-
-        if e.respond_to?(:name) and !(e.respond_to?(:local_simpletype) && e.local_simpletype)
-          # there are one of the basic types
-          typename = create_type_name(mpath, e)
-          elementNames << { name: classname, class: typename, xsd_path: name_element(e).name }
-        else
-          elementNames << { name: classname, class: classname, xsd_path: name_element(e).name }
+      def create_name_complement(mpath, element)
+        # return an array of attribute ()
+        elementNames = []
+        namecomplement = ""
+        element.elements.each do |e|
+          qname = name_element(e)
+          namecomplement += qname.name
+          classname = mapped_class_basename(qname, "")
+          puts "element data  classname: #{classname} name: #{qname.name} element: #{e}"
+          if e.respond_to?(:name) and !(e.respond_to?(:local_simpletype) && e.local_simpletype) and element_basetype(e, false)
+            typename = create_type_name(mpath, e)
+            elementNames << { name: classname, class: typename, xsd_path: qname.name }
+          else
+            elementNames << { name: classname, class: classname, xsd_path: qname.name }
+          end
         end
-      end
-      return elementNames, namecomplement
-    end
-
-    def get_element_attrib(mpath, element, no_prefix = false)
-      classname = mapped_class_basename(name_element(element, no_prefix), "")
-
-      if element.respond_to?(:name) and !(element.respond_to?(:local_simpletype) && element.local_simpletype)
-        typename = create_type_name(mpath, element)
-        { name: classname, class: typename, xsd_path: name_element(element, no_prefix).name }
-      else
-        { name: classname, class: classname, xsd_path: name_element(element, no_prefix).name }
+        return elementNames, namecomplement
       end
 
-      # attrib
-    end
+      def get_element_attrib(mpath, element, no_prefix = false)
+        classname = mapped_class_basename(name_element(element, no_prefix), "")
+        puts "attrib data  classname: #{classname} name: #{name_element(element, no_prefix)} element: #{element}"
+        if element.respond_to?(:name) and !(element.respond_to?(:local_simpletype) && element.local_simpletype) and element_basetype(element, false)
+          typename = create_type_name(mpath, element)
+          { name: classname, class: typename, xsd_path: name_element(element, no_prefix).name }
+        else
+          { name: classname, class: classname, xsd_path: name_element(element, no_prefix).name }
+        end
 
-    def define_attribute(c, attributes)
-      const = {}
-      unless attributes.empty?
-        c.def_method("__xmlattr") do
-          <<-__EOD__
+        # attrib
+      end
+
+      def define_attribute(c, attributes)
+        const = {}
+        unless attributes.empty?
+          c.def_method("__xmlattr") do
+            <<-__EOD__
           @__xmlattr ||= {}
-          __EOD__
+            __EOD__
+          end
         end
-      end
-      attributes.each do |attribute|
-        name = name_attribute(attribute)
-        methodname = safemethodname('xmlattr_' + name.name)
-        constname = 'Attr' + safeconstname(name.name)
-        const[constname] ||= 0
-        if (const[constname] += 1) > 1
-          constname += "_#{const[constname]}"
-        end
-        c.def_const(constname, dqname(name))
-        c.def_method(methodname) do
-          <<-__EOD__
+        attributes.each do |attribute|
+          name = name_attribute(attribute)
+          methodname = safemethodname('xmlattr_' + name.name)
+          constname = 'Attr' + safeconstname(name.name)
+          const[constname] ||= 0
+          if (const[constname] += 1) > 1
+            constname += "_#{const[constname]}"
+          end
+          c.def_const(constname, dqname(name))
+          c.def_method(methodname) do
+            <<-__EOD__
           __xmlattr[#{constname}]
-          __EOD__
-        end
-        c.def_method(methodname + '=', 'value') do
-          <<-__EOD__
+            __EOD__
+          end
+          c.def_method(methodname + '=', 'value') do
+            <<-__EOD__
           __xmlattr[#{constname}] = value
-          __EOD__
+            __EOD__
+          end
+          c.comment << "\n  #{methodname} - #{attribute_basetype(attribute) || '(any)'}"
         end
-        c.comment << "\n  #{methodname} - #{attribute_basetype(attribute) || '(any)'}"
       end
-    end
 
-    def create_arraydef(mpath, qname, typedef)
-      classname = mapped_class_basename(qname, mpath)
-      c = ClassDef.new(classname, '::Array')
-      c.comment = "#{qname}"
-      parentmodule = mapped_class_name(qname, mpath)
-      parse_elements(c, typedef.elements, qname.namespace, parentmodule, true)
-      c
-    end
+      def create_arraydef(mpath, qname, typedef)
+        classname = mapped_class_basename(qname, mpath)
+        c = ClassDef.new(classname, '::Array')
+        c.comment = "#{qname}"
+        parentmodule = mapped_class_name(qname, mpath)
+        parse_elements(c, typedef.elements, qname.namespace, parentmodule, true)
+        c
+      end
 
-    def sort_dependency(types)
-      dep = {}
-      root = []
-      types.each do |type|
-        if type.complexcontent and (base = type.complexcontent.base)
-          dep[base] ||= []
-          dep[base] << type
+      def sort_dependency(types)
+        dep = {}
+        root = []
+        types.each do |type|
+          if type.complexcontent and (base = type.complexcontent.base)
+            dep[base] ||= []
+            dep[base] << type
+          else
+            root << type
+          end
+        end
+        sorted = []
+        root.each do |type|
+          sorted.concat(collect_dependency(type, dep))
+        end
+        sorted.concat(dep.values.flatten)
+        sorted
+      end
+
+      # removes collected key from dep
+      def collect_dependency(type, dep)
+        result = [type]
+        return result unless dep.key?(type.name)
+        dep[type.name].each do |deptype|
+          result.concat(collect_dependency(deptype, dep))
+        end
+        dep.delete(type.name)
+        result
+      end
+
+      def modulepath_split(modulepath)
+        if modulepath.is_a?(::Array)
+          modulepath
         else
-          root << type
+          modulepath.to_s.split('::')
         end
       end
-      sorted = []
-      root.each do |type|
-        sorted.concat(collect_dependency(type, dep))
+
+      def format_skip_element(arr)
+        return arr if arr.empty? # Return the array as is if it's empty
+
+        arr[0] = "allowed_nil_attributes = [#{arr[0]}" # Add [ before the first element
+        arr[-1] = "#{arr[-1]}]" # Add ] after the last element
+
+        arr # Return the modified array
       end
-      sorted.concat(dep.values.flatten)
-      sorted
-    end
 
-    # removes collected key from dep
-    def collect_dependency(type, dep)
-      result = [type]
-      return result unless dep.key?(type.name)
-      dep[type.name].each do |deptype|
-        result.concat(collect_dependency(deptype, dep))
+      def init_line_choice(arr)
+        s = arr.map { |elem| "#{elem[:name]}:{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
+        s
       end
-      dep.delete(type.name)
-      result
-    end
 
-    def modulepath_split(modulepath)
-      if modulepath.is_a?(::Array)
-        modulepath
-      else
-        modulepath.to_s.split('::')
+      def init_line_sequence(arr)
+        s = arr.map { |elem| "{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
+        return "[#{s}]"
       end
-    end
 
-    def format_skip_element(arr)
-      return arr if arr.empty? # Return the array as is if it's empty
-
-      arr[0] = "allowed_nil_attributes = [#{arr[0]}" # Add [ before the first element
-      arr[-1] = "#{arr[-1]}]" # Add ] after the last element
-
-      arr # Return the modified array
-    end
-
-    def init_line_choice(arr)
-      s = arr.map { |elem| "#{elem[:name]}:{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
-      s
-    end
-
-    def init_line_sequence(arr)
-      s = arr.map { |elem| "{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
-      return "[#{s}]"
-    end
-
-    def init_line_elemC(attrib)
-      s = "{name:'#{attrib[:name]}',class:#{attrib[:class]},xsd_path:'#{attrib[:xsd_path]}'}"
-      return s
+      def init_line_elemC(attrib)
+        s = "{name:'#{attrib[:name]}',class:#{attrib[:class]},xsd_path:'#{attrib[:xsd_path]}'}"
+        return s
+      end
     end
   end
-end
 end

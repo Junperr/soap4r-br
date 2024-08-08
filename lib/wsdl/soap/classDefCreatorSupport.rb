@@ -20,7 +20,9 @@ module WSDL
       include XSD::CodeGen::GenSupport
 
       def mapped_class_name(qname, modulepath)
-        @name_creator.assign_name(qname, modulepath)
+        classname = @name_creator.assign_name(qname, modulepath)
+        puts "mapped_class_name #{qname} #{modulepath} #{classname} #{classname.sub(/\A.*:/, '')}"
+        classname
       end
 
       def mapped_class_basename(qname, modulepath)
@@ -107,15 +109,13 @@ __EOD__
           nil
         elsif simpletype = @simpletypes[element.type]
           puts "option 1"
-          if simpletype.restriction and simpletype.restriction.enumeration?
+          if simpletype.restriction
             mapped_class_name(element.type, modulepath)
           else
             nil
           end
-        elsif klass = element_basetype(element, no_prefix)
-          # if klass.is_a?(Array)
-          #   klass
-          # else
+        elsif (klass = element_basetype(element, no_prefix))
+          puts "option 2 selected #{klass}"
           klass.name
           # end
         elsif element.type
@@ -193,9 +193,10 @@ __EOD__
       end
 
       def element_basetype(ele, no_prefix = false)
+
         puts "option 2"
-        puts "element_basetype #{ele.name} type #{ele.type} simpletype #{ele.local_simpletype}"
-        if (klass = basetype_class(ele.type))
+        puts "element_basetype #{ele.name if ele.respond_to?(:name)} #{ele.type if ele.respond_to?(:type)} #{ele.ref if ele.respond_to?(:ref)} #{ele.local_simpletype if ele.respond_to?(:local_simpletype)}"
+        if ele.respond_to?(:type) and (klass = basetype_class(ele.type))
           puts "option bis 1 #{klass}"
           klass_str = klass.to_s
           if (soapklass = SoapToRubyMap[klass_str])
@@ -205,7 +206,7 @@ __EOD__
             puts "option bis 1.5.2 #{klass_str} #{::SoapToRubyMap[klass_str]}"
             klass
           end
-        elsif ele.local_simpletype
+        elsif ele.respond_to?(:local_simpletype) and ele.local_simpletype
           puts "option bis 2"
           # here we have acces to the simple type we should work here
           c = create_simpletypedef(@modulepath, ele.name, ele.local_simpletype)
@@ -245,12 +246,21 @@ __EOD__
         if element.as_array? and !no_prefix
           elemClassNamePrefix = "ElemC"
         end
-        if element.respond_to?(:name)
+        puts "name_element #{element.name if element.respond_to?(:name)} #{element.ref if element.respond_to?(:ref)}"
+        if element.respond_to?(:name) && element.name
+          if elemClassNamePrefix == "ElemC"
+            return XSD::QName.new("", elemClassNamePrefix + mapped_class_basename(element.name, ""))
+          else
             return XSD::QName.new("", elemClassNamePrefix + element.name.name)
+          end
         end
 
-        if element.respond_to?(:ref)
-          return XSD::QName.new("", elemClassNamePrefix + element.ref.name)
+        if element.respond_to?(:ref) && element.ref
+          if elemClassNamePrefix == "ElemC"
+            return XSD::QName.new("", elemClassNamePrefix + mapped_class_basename(element.ref, ""))
+          else
+            return XSD::QName.new("", elemClassNamePrefix + element.ref.name)
+          end
         end
 
         # puts "look here #{element}"

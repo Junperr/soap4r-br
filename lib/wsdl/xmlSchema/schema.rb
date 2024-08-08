@@ -59,14 +59,14 @@ class Schema < Info
   def parse_element(element)
     puts "\n\nSchema#parse_element: element=#{element}"
     case element
-    when ImportName
-      o = Import.new
-      @imports << o
-      o
-    when IncludeName
-      o = Include.new
-      @imports << o
-      o
+    # when ImportName
+    #   o = Import.new
+    #   @imports << o
+    #   o
+    # when IncludeName
+    #   o = Include.new
+    #   @imports << o
+    #   o
     when ComplexTypeName
       o = ComplexType.new
       @complextypes << o

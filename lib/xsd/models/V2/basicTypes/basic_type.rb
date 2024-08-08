@@ -19,7 +19,7 @@ class BasicType
   def self.from_xml(parser, xsd_name, can_be_empty = false)
     if parser.current.name != xsd_name
       if can_be_empty
-        nil
+        return "skipped"
       end
       raise "Current element #{parser.current.name} should be a #{xsd_name}"
     end

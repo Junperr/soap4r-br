@@ -33,9 +33,9 @@ class ClassNameCreator
         if modulepath
           name = [modulepath, name].join('::')
         end
-        while @classname.value?(name)
-          name += '_'
-        end
+        # while @classname.value?(name)
+        #   name += '_'
+        # end
         check_classname(name)
       end
       @classname[key] = name.freeze

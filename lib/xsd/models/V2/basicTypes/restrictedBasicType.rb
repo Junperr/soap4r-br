@@ -16,7 +16,7 @@ class RestrictedBasicType < BasicType
   def self.from_xml(parser, type = 'String', soap_type = 'SOAP::SOAPString', restrictions = {}, can_be_empty = false)
     if parser.current.name != self.xsd_name
       if can_be_empty
-        nil
+        return "skipped"
       end
       raise "Current element #{parser.current.name} should be a #{self.xsd_name}"
     end
