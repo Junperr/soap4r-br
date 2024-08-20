@@ -36,7 +36,7 @@ class ComplexExtension < Info
   end
 
   def have_any?
-    basetype.have_any? or (content && content.have_any?)
+    (basetype and basetype.have_any?) or (content && content.have_any?)
   end
 
   def choice?
@@ -58,7 +58,7 @@ class ComplexExtension < Info
   end
 
   def attributes
-    basetype.attributes + @attributes
+    basetype ? basetype.attributes + @attributes : @attributes
   end
 
   def check_type
@@ -109,7 +109,8 @@ private
   def basetype
     @basetype ||= root.collect_complextypes[@base]
     unless @basetype
-      raise RuntimeError.new("base type definition not found: #{@base}")
+      puts "basetype not found: #{@base}" # since where not running import it may happend
+      # raise RuntimeError.new("base type definition not found: #{@base}")
     end
     @basetype
   end

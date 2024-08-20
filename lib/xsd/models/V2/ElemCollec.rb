@@ -34,7 +34,7 @@ class ElemCollection
   def self.from_xml(parser, can_be_empty = false)
     instance = new
     attrib = instance.attrib # done because of the way the attributes are passed
-
+    puts "elemC from xml #{instance.class}"
     loop do
       break if parser.current.nil? # Ensure we exit if there's no more elements
 
@@ -81,5 +81,18 @@ class ElemCollection
 
   def to_s
     @elements.map(&:to_s).join(', ')
+  end
+
+  def to_custom_xml(xml_file)
+    for elem in @elements
+      to_xml_method = elem.method(:to_custom_xml)
+      parameters = to_xml_method.parameters
+      if parameters.length >= 2
+        xml_file = elem.to_custom_xml(xml_file, @attrib[:xsd_path])
+      else
+        xml_file = elem.to_custom_xml(xml_file)
+      end
+    end
+    xml_file
   end
 end

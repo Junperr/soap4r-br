@@ -26,6 +26,7 @@ module WSDL
       end
 
       def mapped_class_basename(qname, modulepath)
+        puts "mapped_class_basename #{qname} #{modulepath}"
         classname = @name_creator.assign_name(qname, modulepath)
         puts "mapped_class_basename #{qname} #{modulepath} #{classname} #{classname.sub(/\A.*:/, '')}"
         classname.sub(/\A.*:/, '')

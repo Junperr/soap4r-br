@@ -3,6 +3,7 @@ class Choice2
 
   def initialize(attributes = {})
     @attributes = attributes
+    @selected_attrib = nil
     @choice = nil
     validate_attributes
   end
@@ -10,11 +11,11 @@ class Choice2
   def attr_choice(type, value)
     if @attributes.key?(type)
       if @attributes[type][:class].is_a?(Class) && @attributes[type][:class].respond_to?(:new)
+        @selected_attrib = type
         @choice = value
       else
         raise ArgumentError, "Invalid Choice type: #{type}"
       end
-      # @choice_value = value.value
     else
       raise ArgumentError, "Invalid Choice type: #{type}"
     end
@@ -122,6 +123,21 @@ class Choice2
 
     # Return the class name and attribute
     "#{class_name} : {#{attributes_str}}"
+  end
+
+  def to_custom_xml(xml_file)
+    if @choice
+      attrib = @attributes[@selected_attrib]
+      to_xml_method = @choice.method(:to_custom_xml)
+      parameters = to_xml_method.parameters
+      puts "choice to custom xml #{attrib} #{parameters}"
+      if parameters.length >= 2
+        xml_file = @choice.to_custom_xml(xml_file, attrib[:xsd_path])
+      else
+        xml_file = @choice.to_custom_xml(xml_file)
+      end
+    end
+    xml_file
   end
 
 end

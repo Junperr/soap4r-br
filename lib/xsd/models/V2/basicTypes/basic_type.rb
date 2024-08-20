@@ -34,6 +34,13 @@ class BasicType
   def to_s
     @value_str
   end
+
+  def to_custom_xml(xml_file, xsd_name)
+    xml_file = xml_file + "<#{xsd_name}>#{@value_str}</#{xsd_name}>" unless @value_str.nil? or @value_str == ''
+    xml_file
+  end
+
+
   private
 
   def validate(value)

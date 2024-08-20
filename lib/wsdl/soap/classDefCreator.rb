@@ -47,7 +47,7 @@ module WSDL
         puts "elements: #{@elements.inspect}"
         puts "attributes: #{@attributes.inspect}"
 
-        result = "require_relative '../../models/V2/all_class'\n" # any imports you want for your class
+        result = "require_relative 'all_class'\n" # any imports you want for your class
         # cannot use @modulepath because of multiple classes
         if @modulepath
           result << "\n"
@@ -132,7 +132,7 @@ module WSDL
       end
 
       def create_elementdef(mpath, ele)
-        puts "Creating element: #{ele.name}"
+        puts "Creating element: #{ele.name} #{ele.type} #{ele.local_complextype} #{ele.local_simpletype}"
         qualified = (ele.elementform == 'qualified')
         if ele.local_complextype
           puts "Creating complex type: #{ele.name}"
@@ -142,6 +142,9 @@ module WSDL
         elsif ele.local_simpletype
           puts "Creating simple type: #{ele.name}"
           create_simpletypedef(mpath, ele.name, ele.local_simpletype, qualified)
+        elsif ele.name != ele.type
+          puts "Creating simple class for : #{ele.name}"
+          create_refTypeDef(mpath, ele)
         elsif ele.empty?
           puts "Creating simple class: #{ele.name}"
           create_simpleclassdef(mpath, ele.name, nil)
@@ -339,10 +342,10 @@ module WSDL
       def create_complextypedef(mpath, qname, type, qualified = false)
         puts "Creating complex type: #{qname} #{type.compoundtype}"
         case type.compoundtype
-        when :TYPE_STRUCT, :TYPE_EMPTY
+        when :TYPE_STRUCT, :TYPE_EMPTY, :TYPE_ARRAY
           create_structdef(mpath, qname, type, qualified)
-        when :TYPE_ARRAY
-          create_arraydef(mpath, qname, type)
+          # when :TYPE_ARRAY
+          #   create_arraydef(mpath, qname, type)
         when :TYPE_SIMPLE
           create_simpleclassdef(mpath, qname, type)
         when :TYPE_MAP
@@ -382,13 +385,14 @@ module WSDL
         parentmodule = mapped_class_name(qname, mpath)
         puts "parentmodule: #{parentmodule}"
         # define all elements and attributes inside itself
-        init_lines, init_params, skip_params, xml_lines =
+        init_lines, init_params, skip_params, from_xml_lines, to_xml_lines =
           parse_elements(c, typedef.elements, qname.namespace, parentmodule)
         init_params << "can_be_empty = false"
-        puts "init_lines: #{init_lines}"
-        puts "init_params: #{init_params}"
-        puts "skip_params: #{skip_params}"
-        puts "xml_lines: #{xml_lines}"
+        # puts "init_lines: #{init_lines}"
+        # puts "init_params: #{init_params}"
+        # puts "skip_params: #{skip_params}"
+        # puts "from_xml_lines: #{from_xml_lines}"
+        # puts "to_xml_lines: #{to_xml_lines}"
         # puts "\nc2: #{c.dump}\n"
         if !skip_params.empty?
           c.def_attr('allowed_nil_attributes', true, 'allowed_nil_attributes')
@@ -406,20 +410,20 @@ module WSDL
 
         end
         # for min_occur = 0
-    #     puts "skip_params before method: #{skip_params}"
-    #     unless skip_params.empty?
-    #       c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
-    #         "instance_variables.any? do |var|
-    #   # Skip the attribute if it's allowed to be nil or empty
-    #   next if allowed_nil_attributes.include?(var[1..].to_sym)
-    #
-    #   value = instance_variable_get(var)
-    #   if value.nil? || (value.respond_to?(:empty?) && value.empty?)
-    #     raise ArgumentError, \"Attribute '\#{var[1..]}' cannot be nil or empty\"
-    #   end
-    # end"
-    #       end
-    #     end
+        #     puts "skip_params before method: #{skip_params}"
+        #     unless skip_params.empty?
+        #       c.def_method('any_nil_or_empty?', *format_skip_element(skip_params)) do
+        #         "instance_variables.any? do |var|
+        #   # Skip the attribute if it's allowed to be nil or empty
+        #   next if allowed_nil_attributes.include?(var[1..].to_sym)
+        #
+        #   value = instance_variable_get(var)
+        #   if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+        #     raise ArgumentError, \"Attribute '\#{var[1..]}' cannot be nil or empty\"
+        #   end
+        # end"
+        #       end
+        #     end
 
         c.def_method('self.path', '') do
           "\"//\#{self.xsd_name}\""
@@ -427,10 +431,6 @@ module WSDL
 
         c.def_method('self.xsd_name', '') do
           "\"#{qname.to_s.slice(2..-1)}\""
-        end
-
-        unless skip_params.empty?
-          xml_lines << "instance.any_nil_or_empty? unless can_be_empty"
         end
 
         c.def_method('self.from_xml', 'xml, path=nil, can_be_empty = false') do
@@ -447,7 +447,7 @@ module WSDL
       end
     end
     parser.next
-    instance = new\n" + xml_lines.join("\n") + "\ninstance"
+    instance = new\n" + from_xml_lines.join("\n") + "\ninstance"
         end
         c.def_method('to_s') do
           "attributes = self.instance_variables.map do |var|
@@ -462,6 +462,21 @@ module WSDL
     \"\#{self.class.name}: {\#{attributes.join(\", \")}}\""
         end
 
+        c.def_method('to_custom_xml', 'xml_file') do
+          # "bonus = ''\n" +
+          #   "unless xml_file == ''\n" +
+          #   " bonus = \"\\n\"\n" +
+          #   "end\n" +
+            "xml_inside = ''\n" +
+            to_xml_lines.join("\n") + "\n" +
+            "if xml_inside != ''\n" +
+            " xml_file += \"<\#{self.class.xsd_name}>\"\n" +
+            " xml_file += xml_inside\n" +
+            " xml_file += \"\</\#{self.class.xsd_name}>\"\n" +
+            "end\n" +
+            "xml_file"
+        end
+
         # puts "\nc3: #{c.dump}\n"
         c
       end
@@ -470,7 +485,8 @@ module WSDL
         init_lines = []
         init_params = []
         skip_params = []
-        xml_lines = []
+        from_xml_lines = []
+        to_xml_lines = []
         any = false
         elements.each do |element|
 
@@ -486,7 +502,7 @@ module WSDL
             end
             init_lines << "@__xmlele_any = nil"
           when XMLSchema::Element
-
+            puts "\nElement here: #{element.name} #{element.type} #{element.local_complextype} #{element.local_simpletype}"
             if element.as_array?
               cElemCollec = create_elem_collec(mpath, element.name, element)
               puts "cElemCollec: #{cElemCollec.dump}"
@@ -522,7 +538,6 @@ module WSDL
             newC.def_attr(attrname, true, varname)
             can_be_empty = false
             if element.minoccurs == 0
-              # puts "element #{element} can be empty var name: #{varname}"
               skip_params << "#{name_element(element).name}"
               can_be_empty = true
             end
@@ -531,21 +546,23 @@ module WSDL
             if inner2 # element is a simple type that we redefine
               elemClass = mapped_class_basename(element.name, @modulepath)
               init_lines << "@#{varname} = #{elemClass}.new\n@#{varname}.value = #{varname} if #{varname}"
-              xml_lines << "instance.#{varname} = #{elemClass}.from_xml(parser, can_be_empty:#{can_be_empty})"
+              from_xml_lines << "instance.#{varname} = #{elemClass}.from_xml(parser, can_be_empty:#{can_be_empty})"
+              to_xml_lines << "xml_inside = @#{varname}.to_custom_xml(xml_inside)"
               init_params << "#{varname} = nil"
               inner2.comment = "inner class for member: #{name}\n" + inner2.comment
               newC.innermodule << inner2
+            elsif !element.type.nil? and element.name != element.type
+              puts "element is a ref"
+              newC.innermodule << create_refTypeDef(mpath, element)
             else
-              # is of a basic type
-              typename = create_type_name(typebase, element)
-              # if typename == SOAP::SOAPNonNegativeInteger
-              puts "typename is #{typename}"
-              puts "should be #{SoapToRubyMap[element.type]}"
-              # end
+              # is a basic type
+              typename = create_type_name(typebase, element) # get the type of the element
+
               init_lines << "@#{varname} = #{typename}.new"
               init_lines << "@#{varname}.value = #{varname} if #{varname}"
 
-              xml_lines << "instance.#{varname} = #{typename}.from_xml(parser,'#{name}',#{can_be_empty} || can_be_empty)"
+              from_xml_lines << "instance.#{varname} = #{typename}.from_xml(parser,'#{name}',#{can_be_empty} || can_be_empty)"
+              to_xml_lines << "xml_inside = @#{varname}.to_custom_xml(xml_inside)"
 
               init_params << "#{varname} = nil"
             end
@@ -596,14 +613,15 @@ module WSDL
             cSeq = ClassDef.new('Sequence' + namecomplement, 'Sequence')
             cSeq.comment = "SpecificSequence for #{namecomplement}"
             puts "cSeq : #{cSeq.dump}"
-            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+            child_init_lines, child_init_params, child_skip_params, child_from_xml_lines, child_to_xml_lines =
               parse_elements(cSeq, element.elements, base_namespace, mpath + "::#{'Sequence' + namecomplement}", as_array)
             if !child_skip_params.empty?
               c.def_attr('allowed_nil_attributes', true, 'allowed_nil_attributes')
             end
             init_lines << "@#{attrname} = #{cSeq.name}.new"
             init_params << "#{attrname} = nil"
-            xml_lines << "instance.#{attrname} = #{cSeq.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
+            from_xml_lines << "instance.#{attrname} = #{cSeq.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
+            to_xml_lines << "xml_inside = @#{attrname}.to_custom_xml(xml_inside)"
 
             cSeq.def_method('initialize', "can_be_empty = false") do
               lines = ["super(#{init_line_sequence(elementNames)})"]
@@ -653,16 +671,25 @@ module WSDL
             cChoice = ClassDef.new('Choice' + namecomplement, 'Choice2')
             cChoice.comment = "SpecificChoice for #{namecomplement}"
             puts "cChoice : #{cChoice.dump}"
-            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+            child_init_lines, child_init_params, child_skip_params, child_from_xml_lines, child_to_xml_lines =
               parse_elements(cChoice, element.elements, base_namespace, mpath + "::#{'Choice' + namecomplement}", as_array)
             # puts "child_init_lines: #{child_init_lines}"
             # puts "child_init_params: #{child_init_params}"
             # puts "child_skip_params: #{child_skip_params}"
-            # puts "child_xml_lines: #{child_xml_lines}"
-            init_lines << "@#{attrname} = #{cChoice.name}.new"
-            init_params << "#{attrname} = nil"
-            xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
-            # puts "added xml line to #{xml_lines}"
+            # puts "child_from_xml_lines: #{child_from_xml_lines}"
+            if cElemCollec
+              newattrb, newclass = safemethodname(newC.name), capitalize(safemethodname(newC.name))
+              init_lines << "@#{newattrb} = #{newclass}.new"
+              init_params << "#{newattrb} = nil"
+              from_xml_lines << "instance.#{newattrb} = #{newclass}.from_xml(parser,#{can_be_empty} || can_be_empty)"
+              to_xml_lines << "xml_inside = @#{newattrb}.to_custom_xml(xml_inside)"
+            else
+              init_lines << "@#{attrname} = #{cChoice.name}.new"
+              init_params << "#{attrname} = nil"
+              from_xml_lines << "instance.#{attrname} = #{cChoice.name}.from_xml(parser,#{can_be_empty} || can_be_empty)"
+              to_xml_lines << "xml_inside = @#{attrname}.to_custom_xml(xml_inside)"
+            end
+            # puts "added xml line to #{from_xml_lines}"
             # init_lines.concat(child_init_lines)
             # init_params.concat(child_init_params)
 
@@ -686,12 +713,13 @@ module WSDL
               warn("no group definition found: #{element}")
               next
             end
-            child_init_lines, child_init_params, child_skip_params, child_xml_lines =
+            child_init_lines, child_init_params, child_skip_params, child_from_xml_lines, child_to_xml_lines =
               parse_elements(c, element.content.elements, base_namespace, mpath, as_array)
             init_lines.concat(child_init_lines)
             init_params.concat(child_init_params)
             skip_params.concat(child_skip_params)
-            xml_lines.concat(child_xml_lines)
+            from_xml_lines.concat(child_from_xml_lines)
+            to_xml_lines.concat(child_to_xml_lines)
           else
             puts "element #{element} is not element"
             puts "c is #{c} base_namespace is #{base_namespace} mpath is #{mpath} as_array is #{as_array}"
@@ -700,7 +728,7 @@ module WSDL
           end
         end
 
-        [init_lines, init_params, skip_params, xml_lines]
+        [init_lines, init_params, skip_params, from_xml_lines, to_xml_lines]
       end
 
       def check_element(element, can_be_empty = false)
@@ -710,7 +738,7 @@ module WSDL
           c = create_simpletypedef(@modulepath, element.name, element.local_simpletype, false, can_be_empty)
           puts "check1.2 empty change for #{element.name} #{can_be_empty}"
           c
-        # elsif element.local_complextype
+          # elsif element.local_complextype
         end
       end
 
@@ -724,6 +752,7 @@ module WSDL
           classname = mapped_class_basename(qname, "")
           puts "element data  classname: #{classname} name: #{qname.name} element: #{e}"
           if e.respond_to?(:name) and !(e.respond_to?(:local_simpletype) && e.local_simpletype) and element_basetype(e, false)
+            # is a basic type
             typename = create_type_name(mpath, e)
             elementNames << { name: classname, class: typename, xsd_path: qname.name }
           else
@@ -744,6 +773,17 @@ module WSDL
         end
 
         # attrib
+      end
+
+      def create_refTypeDef(mpath, element)
+        puts "Creating refTypeDef: #{element.name} #{element.type}"
+        extendClass = mapped_class_basename(element.type, "")
+        className = mapped_class_basename(element.name, "")
+        c = ClassDef.new(className, "::#{extendClass}")
+        c.def_method('self.xsd_name') do
+          "'#{mapped_class_basename(element.name, mpath)}'"
+        end
+        c
       end
 
       def define_attribute(c, attributes)
@@ -835,7 +875,7 @@ module WSDL
       end
 
       def init_line_choice(arr)
-        s = arr.map { |elem| "#{elem[:name]}:{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
+        s = arr.map { |elem| "#{"'#{elem[:name]}'"}=>{name:'#{elem[:name]}',class:#{elem[:class]},xsd_path:'#{elem[:xsd_path]}'}" }.join(", ")
         s
       end
 

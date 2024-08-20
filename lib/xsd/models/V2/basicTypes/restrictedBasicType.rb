@@ -103,14 +103,14 @@ class RestrictedBasicType < BasicType
   end
 
   def check_pattern(value)
-  if @restrictions[:pattern]
-    patterns = [@restrictions[:pattern]].flatten # Ensure patterns is an array
-    pattern_matched = patterns.any? { |pattern| value =~ pattern }
-    unless pattern_matched
-      raise ArgumentError, "Value '#{value}' does not match any pattern: #{patterns.join(', ')}"
+    if @restrictions[:pattern]
+      patterns = [@restrictions[:pattern]].flatten # Ensure patterns is an array
+      pattern_matched = patterns.any? { |pattern| value =~ pattern }
+      unless pattern_matched
+        raise ArgumentError, "Value '#{value}' does not match any pattern: #{patterns.join(', ')}"
+      end
     end
   end
-end
 
   def check_inclusive(value)
     if @restrictions[:minInclusive] && value < @restrictions[:minInclusive]
@@ -131,20 +131,20 @@ end
   end
 
   def check_total_digits(value)
-  value_str = big_decimal_to_s(value)
-  # puts "value_str: #{value_str} value: #{value}"
+    value_str = big_decimal_to_s(value)
+    # puts "value_str: #{value_str} value: #{value}"
 
-  if @restrictions[:totalDigits] && value_str.gsub('.', '').length > @restrictions[:totalDigits]
-    raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:totalDigits]} digits"
-  end
+    if @restrictions[:totalDigits] && value_str.gsub('.', '').length > @restrictions[:totalDigits]
+      raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:totalDigits]} digits"
+    end
 
-  if @restrictions[:fractionDigits] && value_str.include?('.')
-    fraction_digits = value_str.split('.').last.length
-    if fraction_digits > @restrictions[:fractionDigits]
-      raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:fractionDigits]} fraction digits"
+    if @restrictions[:fractionDigits] && value_str.include?('.')
+      fraction_digits = value_str.split('.').last.length
+      if fraction_digits > @restrictions[:fractionDigits]
+        raise ArgumentError, "Value #{value_str} has more than #{@restrictions[:fractionDigits]} fraction digits"
+      end
     end
   end
-end
 
   def check_white_space(value)
     case @restrictions[:whiteSpace]
@@ -169,6 +169,11 @@ end
 
   def restrictions
     @restrictions
+  end
+
+  def to_custom_xml(xml_file)
+    xml_file = xml_file + "<#{self.class.xsd_name}>#{@value}</#{self.class.xsd_name}>" unless @value.nil? or @value == ''
+    xml_file
   end
 
 end

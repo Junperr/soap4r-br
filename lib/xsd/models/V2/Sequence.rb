@@ -3,6 +3,11 @@ class Sequence
 
   def initialize(attributes = [])
     @attributes = attributes
+    # binding.pry
+    @attributes.each do |attr|
+      self.class.send(:attr_accessor, attr[:name])
+      self.instance_variable_set("@#{safevarname(attr[:name])}", attr[:class].new)
+    end
     @elements = {}
     @allowed_nil_attributes = []
   end
@@ -97,6 +102,7 @@ class Sequence
   end
 
   def self.enclosing_class
+    # get the nested class where it was defined
     name_parts = self.name.split('::')
     if name_parts.length > 1
       parent_class_name = name_parts[0...-1].join('::')
@@ -116,6 +122,31 @@ class Sequence
     "#{class_name} : {#{attributes_str}}"
   end
 
+  def to_custom_xml(xml_file)
+    # Assuming `@attributes` is a hash or array of attributes
+    @attributes.each do |attrib|
+      # Convert the attribute name to a safe variable name
+      var_name = "@#{safevarname(attrib[:name])}"
+
+      # Fetch the instance variable value dynamically
+      elem = self.instance_variable_get(var_name)
+      puts "testing variable #{var_name} #{elem}"
+      # Ensure the element responds to the method 'to_custom_xml'
+      if elem
+        puts "to custom xml #{elem.class}"
+        to_xml_method = elem.method(:to_custom_xml)
+        parameters = to_xml_method.parameters
+        if parameters.length >= 2
+          xml_file = elem.to_custom_xml(xml_file, attrib[:xsd_path])
+        else
+          xml_file = elem.to_custom_xml(xml_file)
+        end
+      end
+    end
+
+    xml_file
+  end
+
   def uncapitalize(target)
     target.sub(/^([A-Z])/) { $1.downcase }
   end
@@ -128,4 +159,5 @@ class Sequence
       safename
     end
   end
+
 end
